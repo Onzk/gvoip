@@ -36,8 +36,19 @@ class Handler(BaseHTTPRequestHandler):
             ])
             procs[ip] = {"proc": proc, "port": port}
 
+        # Déterminer l'IP du serveur GVoIP dynamiquement
+        import socket as _socket
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(('8.8.8.8', 80))
+            server_ip = s.getsockname()[0]
+            s.close()
+        except:
+            server_ip = '127.0.0.1'
+
         self.send_response(302)
-        self.send_header('Location', f'http://192.168.1.157:{port}')
+        self.send_header('Location', f'http://{server_ip}:{port}')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
 HTTPServer(('0.0.0.0', 9061), Handler).serve_forever()
