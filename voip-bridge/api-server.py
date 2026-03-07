@@ -64,10 +64,16 @@ class Handler(BaseHTTPRequestHandler):
             if not ip:
                 self.send_json(400, {"error": "ip requis"}); return
 
-            where = f"WHERE DATE(calldate) = '{date}'" if date else "WHERE DATE(calldate) = CURDATE()"
-            q = (f"SELECT calldate,src,dst,dcontext,duration,billsec,disposition,"
-                 f"channel,dstchannel,uniqueid FROM asteriskcdrdb.cdr {where} "
-                 f"ORDER BY calldate DESC LIMIT {limit};")
+            where = f"WHERE DATE(c.calldate) = '{date}'" if date else "WHERE DATE(c.calldate) = CURDATE()"
+            q = (f"SELECT c.calldate, c.src, c.dst, c.dcontext, c.duration, c.billsec, c.disposition,"
+                 f"c.channel, c.dstchannel, c.uniqueid,"
+                 f"COALESCE(us.description, us.name, '') AS src_name,"
+                 f"COALESCE(ud.description, ud.name, '') AS dst_name"
+                 f" FROM asteriskcdrdb.cdr c"
+                 f" LEFT JOIN asterisk.users us ON us.extension = c.src"
+                 f" LEFT JOIN asterisk.users ud ON ud.extension = c.dst"
+                 f" {where}"
+                 f" ORDER BY c.calldate DESC LIMIT {limit};")
 
             # Essai root sans password, puis avec password FreePBX commun
             cmd = (f"mysql -u root --silent -e \"{q}\" 2>/dev/null || "
@@ -90,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
                         "channel":     parts[7] if len(parts) > 7 else "",
                         "dstchannel":  parts[8] if len(parts) > 8 else "",
                         "uniqueid":    parts[9] if len(parts) > 9 else "",
+                        "src_name":    parts[10] if len(parts) > 10 else "",
+                        "dst_name":    parts[11] if len(parts) > 11 else "",
                     })
 
             logging.info(f"CDR {ip} ({date or 'today'}): {len(calls)} enregistrements")
