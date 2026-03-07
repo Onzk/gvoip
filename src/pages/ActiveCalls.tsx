@@ -37,6 +37,8 @@ interface CDR {
   calldate: string;
   src: string;
   dst: string;
+  src_name?: string;
+  dst_name?: string;
   context: string;
   duration: number;
   billsec: number;
@@ -249,11 +251,13 @@ const CDRDetail = ({ cdr, onClose }: { cdr: CDR | null; onClose: () => void }) =
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-lg bg-muted/20">
                 <p className="text-xs text-muted-foreground mb-1">Appelant</p>
-                <p className="font-semibold text-foreground">{cdr.src}</p>
+                <p className="font-semibold text-foreground">{cdr.src_name || cdr.src}</p>
+                {cdr.src_name && <p className="text-xs font-mono text-muted-foreground">{cdr.src}</p>}
               </div>
               <div className="p-3 rounded-lg bg-muted/20">
                 <p className="text-xs text-muted-foreground mb-1">Destinataire</p>
-                <p className="font-semibold text-foreground">{cdr.dst}</p>
+                <p className="font-semibold text-foreground">{cdr.dst_name || cdr.dst}</p>
+                {cdr.dst_name && <p className="text-xs font-mono text-muted-foreground">{cdr.dst}</p>}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -371,20 +375,25 @@ const ActiveCalls = () => {
   }, []);
 
   // ── CDR : calcul plage de dates ───────────────────────────────────────────
-  const getDateForApi = (): string => {
+  const getDateRangeForApi = (): { date_from: string; date_to: string } => {
     const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
     switch (period) {
-      case "today":      return now.toISOString().split("T")[0];
-      case "yesterday":  return new Date(now.getTime() - 86400000).toISOString().split("T")[0];
-      case "custom":     return dateFrom || now.toISOString().split("T")[0];
-      default:           return now.toISOString().split("T")[0];
+      case "today":     return { date_from: today,     date_to: today };
+      case "yesterday": return { date_from: yesterday, date_to: yesterday };
+      case "custom":    return {
+        date_from: dateFrom || today,
+        date_to:   dateTo   || dateFrom || today,
+      };
+      default:          return { date_from: today, date_to: today };
     }
   };
 
   // ── CDR : fetch direct depuis FreePBX via SSH + MySQL ────────────────────
   const fetchCDRs = async () => {
     setLoadingCdr(true);
-    const date = getDateForApi();
+    const { date_from, date_to } = getDateRangeForApi();
     const targets = ipbxFilter === "all"
       ? ipbxList
       : ipbxList.filter(i => i.id === ipbxFilter);
@@ -398,7 +407,8 @@ const ActiveCalls = () => {
         ip,
         ssh_user:     ipbx.ssh_user || "root",
         ssh_password: ipbx.ssh_password || "",
-        date,
+        date_from,
+        date_to,
         limit:        "500",
       });
       try {
@@ -415,25 +425,33 @@ const ActiveCalls = () => {
     // Trier par date décroissante
     allCdrs.sort((a, b) => new Date(b.calldate).getTime() - new Date(a.calldate).getTime());
 
-    // Appliquer filtres locaux
+    // Stats sur TOUS les appels (avant filtre disposition/recherche)
+    const answeredAll = allCdrs.filter(c => c.disposition === "ANSWERED").length;
+    const missedAll   = allCdrs.filter(c => c.disposition === "NO ANSWER" || c.disposition === "NO_ANSWER").length;
+    const totalDurAll = allCdrs.reduce((a, c) => a + (c.billsec || 0), 0);
+    setCdrStats({
+      total: allCdrs.length,
+      answered: answeredAll,
+      missed: missedAll,
+      totalDuration: totalDurAll,
+      avgDuration: answeredAll > 0 ? Math.round(totalDurAll / answeredAll) : 0,
+    });
+
+    // Appliquer filtres locaux (affichage seulement)
     let filtered = allCdrs;
-    if (dispositionFilter !== "all") filtered = filtered.filter(c => c.disposition === dispositionFilter);
+    if (dispositionFilter !== "all") {
+      filtered = filtered.filter(c => {
+        const d = c.disposition?.toUpperCase();
+        if (dispositionFilter === "NO ANSWER") return d === "NO ANSWER" || d === "NO_ANSWER";
+        return d === dispositionFilter.toUpperCase();
+      });
+    }
     if (searchText) filtered = filtered.filter(c =>
       c.src?.includes(searchText) || c.dst?.includes(searchText) ||
       c.ipbx_name?.toLowerCase().includes(searchText.toLowerCase())
     );
 
     setCdrs(filtered);
-
-    // Stats
-    const answered = filtered.filter(c => c.disposition === "ANSWERED").length;
-    const missed = filtered.filter(c => c.disposition === "NO ANSWER").length;
-    const totalDuration = filtered.reduce((a, c) => a + (c.billsec || 0), 0);
-    setCdrStats({
-      total: filtered.length, answered, missed, totalDuration,
-      avgDuration: answered > 0 ? Math.round(totalDuration / answered) : 0,
-    });
-
     setLoadingCdr(false);
   };
 
@@ -668,8 +686,14 @@ const ActiveCalls = () => {
                         onClick={() => setSelectedCdr(cdr)}
                         className="border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors">
                         <td className="p-3 font-mono text-muted-foreground whitespace-nowrap">{formatDate(cdr.calldate)}</td>
-                        <td className="p-3 font-mono font-semibold text-foreground">{cdr.src}</td>
-                        <td className="p-3 font-mono text-foreground">{cdr.dst}</td>
+                        <td className="p-3">
+                          <p className="font-mono font-semibold text-foreground">{cdr.src}</p>
+                          {cdr.src_name && <p className="text-muted-foreground text-[11px]">{cdr.src_name}</p>}
+                        </td>
+                        <td className="p-3">
+                          <p className="font-mono text-foreground">{cdr.dst}</p>
+                          {cdr.dst_name && <p className="text-muted-foreground text-[11px]">{cdr.dst_name}</p>}
+                        </td>
                         <td className="p-3 font-mono font-bold text-foreground">{formatSeconds(cdr.billsec || cdr.duration)}</td>
                         <td className="p-3">
                           <div className={`flex items-center gap-1 font-semibold ${getDispositionColor(cdr.disposition)}`}>
