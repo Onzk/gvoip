@@ -58,13 +58,25 @@ class Handler(BaseHTTPRequestHandler):
             ip           = params.get("ip", [""])[0]
             ssh_user     = params.get("ssh_user", ["root"])[0]
             ssh_password = params.get("ssh_password", [""])[0]
-            date         = params.get("date", [""])[0]
+            date_from    = params.get("date_from", [""])[0]
+            date_to      = params.get("date_to",   [""])[0]
+            # rétrocompat : ancien paramètre "date"
+            date_single  = params.get("date", [""])[0]
+            if date_single and not date_from:
+                date_from = date_single
+            if not date_to:
+                date_to = date_from
             limit        = params.get("limit", ["200"])[0]
 
             if not ip:
                 self.send_json(400, {"error": "ip requis"}); return
 
-            where = f"WHERE DATE(c.calldate) = '{date}'" if date else "WHERE DATE(c.calldate) = CURDATE()"
+            if date_from and date_to:
+                where = f"WHERE DATE(calldate) BETWEEN '{date_from}' AND '{date_to}'"
+            elif date_from:
+                where = f"WHERE DATE(calldate) = '{date_from}'"
+            else:
+                where = "WHERE DATE(calldate) = CURDATE()"
             q = (f"SELECT c.calldate, c.src, c.dst, c.dcontext, c.duration, c.billsec, c.disposition,"
                  f"c.channel, c.dstchannel, c.uniqueid,"
                  f"COALESCE(us.description, us.name, '') AS src_name,"
@@ -93,17 +105,44 @@ class Handler(BaseHTTPRequestHandler):
                         "duration":    int(parts[4]) if parts[4].isdigit() else 0,
                         "billsec":     int(parts[5]) if parts[5].isdigit() else 0,
                         "disposition": parts[6],
-                        "channel":     parts[7] if len(parts) > 7 else "",
-                        "dstchannel":  parts[8] if len(parts) > 8 else "",
-                        "uniqueid":    parts[9] if len(parts) > 9 else "",
-                        "src_name":    parts[10] if len(parts) > 10 else "",
-                        "dst_name":    parts[11] if len(parts) > 11 else "",
+                        "channel":     parts[7] if len(parts) > 7  else "",
+                        "dstchannel":  parts[8] if len(parts) > 8  else "",
+                        "uniqueid":    parts[9] if len(parts) > 9  else "",
+                        "src_name":    parts[10].strip() if len(parts) > 10 else "",
+                        "dst_name":    parts[11].strip() if len(parts) > 11 else "",
                     })
 
-            logging.info(f"CDR {ip} ({date or 'today'}): {len(calls)} enregistrements")
+            logging.info(f"CDR {ip} ({date_from}→{date_to}): {len(calls)} enregistrements")
             self.send_json(200, {"calls": calls, "total": len(calls), "date": date, "ip": ip})
 
-        # ── Appels actifs via AMI ─────────────────────────────────
+        # -- Capture PCAP d'un appel
+        elif parsed.path == "/api/pcap":
+            ip           = params.get("ip", [""])[0]
+            ssh_user     = params.get("ssh_user", ["root"])[0]
+            ssh_password = params.get("ssh_password", [""])[0]
+            uniqueid     = params.get("uniqueid", [""])[0]
+
+            if not ip or not uniqueid:
+                self.send_json(400, {"error": "ip et uniqueid requis"}); return
+
+            pcap_path = f"/tmp/pcap_{uniqueid}.pcap"
+            out, _ = ssh_cmd(ip, ssh_user, ssh_password, f"test -f {pcap_path} && echo EXISTS || echo MISSING")
+
+            if "MISSING" in out:
+                self.send_json(404, {
+                    "error": "Aucun fichier PCAP trouve pour cet appel",
+                    "hint":  f"Fichier attendu sur le FreePBX : {pcap_path}",
+                    "uniqueid": uniqueid,
+                }); return
+
+            b64, rc = ssh_cmd(ip, ssh_user, ssh_password, f"base64 -w 0 {pcap_path}")
+            if rc != 0 or not b64:
+                self.send_json(500, {"error": "Impossible de lire le fichier PCAP"}); return
+
+            logging.info(f"PCAP {ip} uniqueid={uniqueid}: {len(b64)} bytes")
+            self.send_json(200, {"uniqueid": uniqueid, "ip": ip, "pcap_b64": b64, "filename": f"call_{uniqueid}.pcap"})
+
+        # -- Appels actifs via AMI────
         elif parsed.path == "/api/active-calls":
             ip           = params.get("ip", [""])[0]
             ami_user     = params.get("ami_user", ["gvoip"])[0]
