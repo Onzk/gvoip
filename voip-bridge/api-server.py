@@ -6,13 +6,14 @@ from urllib.parse import urlparse, parse_qs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 def ssh_cmd(ip, ssh_user, ssh_password, cmd):
-    if ssh_user != "root" and ssh_password:
+    user = ssh_user or "root"
+    if ssh_password:
         base = ["sshpass", "-p", ssh_password, "ssh",
                 "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
-                f"{ssh_user}@{ip}", cmd]
+                f"{user}@{ip}", cmd]
     else:
         base = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
-                f"root@{ip}", cmd]
+                f"{user}@{ip}", cmd]
     result = subprocess.run(base, capture_output=True, text=True, timeout=30)
     return result.stdout.strip(), result.returncode
 
@@ -113,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                     })
 
             logging.info(f"CDR {ip} ({date_from}→{date_to}): {len(calls)} enregistrements")
-            self.send_json(200, {"calls": calls, "total": len(calls), "date_from": date_from, "date_to": date_to, "ip": ip})
+            self.send_json(200, {"calls": calls, "total": len(calls), "date": date, "ip": ip})
 
         # -- Capture PCAP d'un appel
         elif parsed.path == "/api/pcap":
