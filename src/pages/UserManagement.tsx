@@ -150,8 +150,8 @@ const UserManagement = () => {
     fetchAll();
   };
 
-  const SUPABASE_URL = "http://192.168.1.157:8000";
-  const SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NzI1MDU1NjksImV4cCI6MjA4Nzg2NTU2OX0.cLQpPqlWg-O0h48iA1UZsNczr5lKs9ZrpiqGrUFITDM";
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+  const SERVICE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string;
 
   const handleCreate = async () => {
     if (!createForm.email || !createForm.password) {
@@ -220,7 +220,6 @@ const UserManagement = () => {
 
   const handleDeleteUser = async (profile: Profile) => {
     if (!confirm(`Supprimer definitivement ${profile.email} ?`)) return;
-    const SK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NzI1MDU1NjksImV4cCI6MjA4Nzg2NTU2OX0.cLQpPqlWg-O0h48iA1UZsNczr5lKs9ZrpiqGrUFITDM";
     try {
       // 1. Supprimer les données liées
       await Promise.all([
@@ -232,11 +231,11 @@ const UserManagement = () => {
       // 2. Supprimer le profil
       await supabase.from("profiles").delete().eq("user_id", profile.user_id);
       // 3. Supprimer l'user auth
-      const res = await fetch(`http://192.168.1.157:8000/auth/v1/admin/users/${profile.user_id}`, {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${profile.user_id}`, {
         method: "DELETE",
         headers: {
-          "apikey": SK,
-          "Authorization": `Bearer ${SK}`,
+          "apikey": SERVICE_KEY,
+          "Authorization": `Bearer ${SERVICE_KEY}`,
         },
       });
       if (!res.ok) {
