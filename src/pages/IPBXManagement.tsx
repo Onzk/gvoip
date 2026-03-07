@@ -99,9 +99,12 @@ const IPBXManagement = () => {
     }
     setConfiguring(true);
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 90000);
       const response = await fetch(`/api/setup-freepbx`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           ip: form.ip_address,
           ami_user: form.ami_user,
@@ -111,13 +114,15 @@ const IPBXManagement = () => {
           ssh_sudo_password: form.ssh_sudo_password || ""
         })
       });
+      clearTimeout(timeout);
       if (response.ok) {
         toast({ title: "✅ Configuration réussie", description: `AMI configuré sur ${form.ip_address}` });
       } else {
         toast({ title: "Erreur configuration", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Erreur réseau", variant: "destructive" });
+    } catch (e: any) {
+      const msg = e?.name === "AbortError" ? "Timeout — opération trop longue" : "Erreur réseau";
+      toast({ title: msg, variant: "destructive" });
     }
     setConfiguring(false);
   };
