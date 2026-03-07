@@ -251,13 +251,11 @@ const CDRDetail = ({ cdr, onClose }: { cdr: CDR | null; onClose: () => void }) =
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-lg bg-muted/20">
                 <p className="text-xs text-muted-foreground mb-1">Appelant</p>
-                <p className="font-semibold text-foreground">{cdr.src_name || cdr.src}</p>
-                {cdr.src_name && <p className="text-xs font-mono text-muted-foreground">{cdr.src}</p>}
+                <p className="font-semibold text-foreground">{cdr.src}</p>
               </div>
               <div className="p-3 rounded-lg bg-muted/20">
                 <p className="text-xs text-muted-foreground mb-1">Destinataire</p>
-                <p className="font-semibold text-foreground">{cdr.dst_name || cdr.dst}</p>
-                {cdr.dst_name && <p className="text-xs font-mono text-muted-foreground">{cdr.dst}</p>}
+                <p className="font-semibold text-foreground">{cdr.dst}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -376,16 +374,13 @@ const ActiveCalls = () => {
 
   // ── CDR : calcul plage de dates ───────────────────────────────────────────
   const getDateRangeForApi = (): { date_from: string; date_to: string } => {
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
+    const now      = new Date();
+    const today    = now.toISOString().split("T")[0];
     const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
     switch (period) {
       case "today":     return { date_from: today,     date_to: today };
       case "yesterday": return { date_from: yesterday, date_to: yesterday };
-      case "custom":    return {
-        date_from: dateFrom || today,
-        date_to:   dateTo   || dateFrom || today,
-      };
+      case "custom":    return { date_from: dateFrom || today, date_to: dateTo || dateFrom || today };
       default:          return { date_from: today, date_to: today };
     }
   };
@@ -425,33 +420,30 @@ const ActiveCalls = () => {
     // Trier par date décroissante
     allCdrs.sort((a, b) => new Date(b.calldate).getTime() - new Date(a.calldate).getTime());
 
-    // Stats sur TOUS les appels (avant filtre disposition/recherche)
-    const answeredAll = allCdrs.filter(c => c.disposition === "ANSWERED").length;
-    const missedAll   = allCdrs.filter(c => c.disposition === "NO ANSWER" || c.disposition === "NO_ANSWER").length;
-    const totalDurAll = allCdrs.reduce((a, c) => a + (c.billsec || 0), 0);
+    // Normaliser disposition (FreePBX peut renvoyer "NO ANSWER" ou "NO_ANSWER")
+    allCdrs.forEach(c => {
+      if (c.disposition) c.disposition = c.disposition.trim().replace("NO_ANSWER", "NO ANSWER");
+    });
+
+    // Stats calculées sur TOUS les appels (avant filtre disposition/recherche)
+    const answered     = allCdrs.filter(c => c.disposition === "ANSWERED").length;
+    const missed       = allCdrs.filter(c => c.disposition === "NO ANSWER").length;
+    const totalDuration = allCdrs.reduce((a, c) => a + (c.billsec || 0), 0);
     setCdrStats({
-      total: allCdrs.length,
-      answered: answeredAll,
-      missed: missedAll,
-      totalDuration: totalDurAll,
-      avgDuration: answeredAll > 0 ? Math.round(totalDurAll / answeredAll) : 0,
+      total: allCdrs.length, answered, missed, totalDuration,
+      avgDuration: answered > 0 ? Math.round(totalDuration / answered) : 0,
     });
 
     // Appliquer filtres locaux (affichage seulement)
     let filtered = allCdrs;
-    if (dispositionFilter !== "all") {
-      filtered = filtered.filter(c => {
-        const d = c.disposition?.toUpperCase();
-        if (dispositionFilter === "NO ANSWER") return d === "NO ANSWER" || d === "NO_ANSWER";
-        return d === dispositionFilter.toUpperCase();
-      });
-    }
+    if (dispositionFilter !== "all") filtered = filtered.filter(c => c.disposition === dispositionFilter);
     if (searchText) filtered = filtered.filter(c =>
       c.src?.includes(searchText) || c.dst?.includes(searchText) ||
       c.ipbx_name?.toLowerCase().includes(searchText.toLowerCase())
     );
 
     setCdrs(filtered);
+
     setLoadingCdr(false);
   };
 
@@ -468,6 +460,28 @@ const ActiveCalls = () => {
     const a = document.createElement("a"); a.href = url;
     a.download = `CDR_${period}_${new Date().toISOString().split("T")[0]}.csv`;
     a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPcap = async (cdr: CDR, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ipbx = ipbxList.find(i => i.id === cdr.ipbx_id);
+    if (!ipbx) return;
+    const ip = ipbx.ip_address || ipbx.host || "";
+    const params = new URLSearchParams({
+      ip, ssh_user: ipbx.ssh_user || "root",
+      ssh_password: ipbx.ssh_password || "",
+      uniqueid: cdr.uniqueid,
+    });
+    try {
+      const res = await fetch(`/api/pcap?${params}`);
+      const data = await res.json();
+      if (!res.ok) { alert(data.error + (data.hint ? `\n${data.hint}` : "")); return; }
+      const bytes = Uint8Array.from(atob(data.pcap_b64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/vnd.tcpdump.pcap" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url;
+      a.download = data.filename; a.click(); URL.revokeObjectURL(url);
+    } catch { alert("Erreur lors du téléchargement PCAP"); }
   };
 
   const avgMos = calls.filter(c => c.mos).length > 0 ? calls.filter(c => c.mos).reduce((a, c) => a + (c.mos || 0), 0) / calls.filter(c => c.mos).length : null;
@@ -628,9 +642,15 @@ const ActiveCalls = () => {
               </div>
             </div>
             {period === "custom" && (
-              <div>
-                <Label className="text-xs">Date</Label>
-                <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 h-8 text-xs w-48" />
+              <div className="flex items-end gap-3">
+                <div>
+                  <Label className="text-xs">Du</Label>
+                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 h-8 text-xs w-40" />
+                </div>
+                <div>
+                  <Label className="text-xs">Au</Label>
+                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="mt-1 h-8 text-xs w-40" />
+                </div>
               </div>
             )}
             <div className="flex items-center gap-2">
@@ -671,15 +691,16 @@ const ActiveCalls = () => {
                     <th className="text-left p-3 text-muted-foreground font-semibold">Durée</th>
                     <th className="text-left p-3 text-muted-foreground font-semibold">Statut</th>
                     <th className="text-left p-3 text-muted-foreground font-semibold">IPBX</th>
+                    <th className="p-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingCdr ? (
-                    <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">
+                    <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">
                       <Loader2 size={16} className="animate-spin inline mr-2" />Lecture CDR depuis FreePBX...
                     </td></tr>
                   ) : cdrs.length === 0 ? (
-                    <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Aucun enregistrement pour cette date</td></tr>
+                    <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Aucun enregistrement pour cette date</td></tr>
                   ) : (
                     cdrs.map((cdr, i) => (
                       <motion.tr key={cdr.uniqueid || i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.005 }}
@@ -701,6 +722,14 @@ const ActiveCalls = () => {
                           </div>
                         </td>
                         <td className="p-3 text-muted-foreground">{cdr.ipbx_name || "—"}</td>
+                        <td className="p-3" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => handleDownloadPcap(cdr, e)}
+                            title="Télécharger PCAP"
+                            className="p-1.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-primary transition-colors">
+                            <Mic size={13} />
+                          </button>
+                        </td>
                       </motion.tr>
                     ))
                   )}
