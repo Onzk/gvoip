@@ -22,7 +22,7 @@ interface Alert {
 }
 
 const Alerts = () => {
-  const { applyFilter } = useAllowedIpbx();
+  const { applyFilter, ready } = useAllowedIpbx();
   const { isAdmin, user } = useAuth();
   const { toast } = useToast();
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -41,15 +41,16 @@ const Alerts = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAlerts(); }, [filter, showAck]);
+  useEffect(() => { if (ready) fetchAlerts(); }, [filter, showAck, ready]);
 
   // Realtime
   useEffect(() => {
+    if (!ready) return;
     const channel = supabase.channel("alerts-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "alerts" }, () => fetchAlerts())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [filter, showAck]);
+  }, [filter, showAck, ready]);
 
   const acknowledge = async (id: string) => {
     await supabase.from("alerts").update({
