@@ -1,5 +1,5 @@
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Activity, Gauge, Zap, WifiOff, RefreshCw } from "lucide-react";
 import { KPICard } from "@/components/noc/KPICard";
@@ -58,7 +58,7 @@ const QualityMonitoring = () => {
     q.then(({ data }) => { if (data) setIpbxList(data as IPBX[]); });
   }, [ready, isAdmin, allowedIpbxIds]);
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     setLoading(true);
     const now = new Date();
     const periodMap: Record<string, number> = {
@@ -103,15 +103,15 @@ const QualityMonitoring = () => {
     }
     setLastUpdate(new Date());
     setLoading(false);
-  };
+  }, [applyFilter, period, ipbxFilter]);
 
-  useEffect(() => { if (ready) fetchMetrics(); }, [period, ipbxFilter, ready]);
+  useEffect(() => { if (ready) fetchMetrics(); }, [fetchMetrics, ready]);
 
   useEffect(() => {
     if (!ready) return;
     const interval = setInterval(fetchMetrics, 30000);
     return () => clearInterval(interval);
-  }, [period, ipbxFilter, ready]);
+  }, [fetchMetrics, ready]);
 
   const avg = metrics.length > 0 ? {
     mos: parseFloat((metrics.reduce((s, m) => s + m.mos, 0) / metrics.length).toFixed(2)),
