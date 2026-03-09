@@ -69,32 +69,30 @@ const Dashboard = () => {
       })));
     }
 
-      // Call volume - requête réelle sur la table calls (24h)
+      // Call volume — colonne date réelle : started_at (pas de direction dans la table)
       const since24h = new Date(Date.now() - 3600000 * 24).toISOString();
       const cdrRes = await applyFilter(
         supabase
           .from("calls")
-          .select("id, direction, created_at, status")
-          .gte("created_at", since24h)
-          .order("created_at", { ascending: true })
+          .select("trunk_name, started_at, duration")
+          .gte("started_at", since24h)
+          .order("started_at", { ascending: true })
       );
 
       if (cdrRes.data && cdrRes.data.length > 0) {
-        // Grouper par heure et séparer entrants / sortants
+        // Grouper par heure — total appels (pas de direction disponible dans la table)
         const groups = new Map<string, { entrants: number; sortants: number }>();
         cdrRes.data.forEach((call: any) => {
-          const h = new Date(call.created_at).toLocaleTimeString("fr-FR", {
+          if (!call.started_at) return;
+          const h = new Date(call.started_at).toLocaleTimeString("fr-FR", {
             hour: "2-digit",
             minute: "00",
           });
           if (!groups.has(h)) groups.set(h, { entrants: 0, sortants: 0 });
-          const g = groups.get(h)!;
-          if (call.direction === "inbound") g.entrants += 1;
-          else g.sortants += 1;
+          // Sans colonne direction, on incrémente "entrants" comme compteur total
+          groups.get(h)!.entrants += 1;
         });
-        setCallVolume(
-          Array.from(groups.entries()).map(([h, v]) => ({ h, ...v }))
-        );
+        setCallVolume(Array.from(groups.entries()).map(([h, v]) => ({ h, ...v })));
       } else {
         setCallVolume([]);
       }
@@ -165,8 +163,7 @@ const Dashboard = () => {
                 <YAxis {...axisStyle} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="entrants" fill="hsl(185, 70%, 50%)" radius={[3,3,0,0]} />
-                <Bar dataKey="sortants" fill="hsl(142, 70%, 45%)" radius={[3,3,0,0]} />
+                <Bar dataKey="entrants" name="Total appels" fill="hsl(185, 70%, 50%)" radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
