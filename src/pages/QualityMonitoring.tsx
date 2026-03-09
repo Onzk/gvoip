@@ -67,9 +67,9 @@ const QualityMonitoring = () => {
     const hours = periodMap[period] || 1;
     const from = new Date(now.getTime() - hours * 3600000).toISOString();
 
-    let query = applyFilter(supabase.from("quality_metrics"))
-      .select("mos, jitter, packet_loss, rtt, recorded_at")
-      .gte("recorded_at", from)
+    let query = applyFilter(
+      supabase.from("quality_metrics").select("mos, jitter, packet_loss, rtt, recorded_at")
+    ).gte("recorded_at", from)
       .order("recorded_at", { ascending: true });
 
     if (ipbxFilter !== "all") query = query.eq("ipbx_id", ipbxFilter);
