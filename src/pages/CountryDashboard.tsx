@@ -38,6 +38,16 @@ const getFlagEmoji = (code: string) => {
 };
 
 const CountryDashboard = () => {
+  const tooltipStyle = (() => {
+    const isDark = document.documentElement.classList.contains("dark");
+    return {
+      background: isDark ? "hsl(220, 18%, 12%)" : "hsl(0, 0%, 100%)",
+      border: isDark ? "1px solid hsl(220, 14%, 22%)" : "1px solid hsl(220, 14%, 85%)",
+      borderRadius: 8,
+      fontSize: 12,
+      color: isDark ? "hsl(210, 20%, 92%)" : "hsl(220, 20%, 10%)",
+    };
+  })();
   const { id } = useParams<{ id: string }>();
   const [country, setCountry] = useState<any>(null);
   const [ipbxList, setIpbxList] = useState<any[]>([]);
@@ -388,7 +398,7 @@ const CountryDashboard = () => {
                 <Pie data={trunkStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
                   {trunkStatusData.map((entry, i) => <Cell key={i} fill={entry.name === "UP" ? "hsl(142, 70%, 45%)" : "hsl(0, 70%, 50%)"} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: "hsl(220, 18%, 10%)", border: "1px solid hsl(220, 14%, 18%)", borderRadius: 8, fontSize: 12, color: "hsl(210, 20%, 92%)" }} />
+                <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -406,7 +416,7 @@ const CountryDashboard = () => {
                 <Pie data={extStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
                   {extStatusData.map((entry, i) => <Cell key={i} fill={entry.name === "En ligne" ? "hsl(142, 70%, 45%)" : entry.name === "Hors ligne" ? "hsl(0, 70%, 50%)" : "hsl(45, 70%, 50%)"} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: "hsl(220, 18%, 10%)", border: "1px solid hsl(220, 14%, 18%)", borderRadius: 8, fontSize: 12, color: "hsl(210, 20%, 92%)" }} />
+                <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
