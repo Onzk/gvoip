@@ -182,4 +182,14 @@
     background: hsl(var(--border));
     border-radius: 3px;
   }
+
+  /* ── Fix icône calendrier mode sombre ── */
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+    cursor: pointer;
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
 }
