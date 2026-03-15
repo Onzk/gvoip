@@ -38,16 +38,15 @@ const getFlagEmoji = (code: string) => {
 };
 
 const CountryDashboard = () => {
-  const tooltipStyle = (() => {
-    const isDark = document.documentElement.classList.contains("dark");
-    return {
-      background: isDark ? "hsl(220, 18%, 12%)" : "hsl(0, 0%, 100%)",
-      border: isDark ? "1px solid hsl(220, 14%, 22%)" : "1px solid hsl(220, 14%, 85%)",
-      borderRadius: 8,
-      fontSize: 12,
-      color: isDark ? "hsl(210, 20%, 92%)" : "hsl(220, 20%, 10%)",
-    };
-  })();
+  const tooltipStyle = {
+    background: getComputedStyle(document.documentElement).getPropertyValue("--card")
+      ? `hsl(${getComputedStyle(document.documentElement).getPropertyValue("--card")})`
+      : "#ffffff",
+    border: `1px solid hsl(${getComputedStyle(document.documentElement).getPropertyValue("--border")})`,
+    borderRadius: 8,
+    fontSize: 12,
+    color: `hsl(${getComputedStyle(document.documentElement).getPropertyValue("--foreground")})`,
+  };
   const { id } = useParams<{ id: string }>();
   const [country, setCountry] = useState<any>(null);
   const [ipbxList, setIpbxList] = useState<any[]>([]);
