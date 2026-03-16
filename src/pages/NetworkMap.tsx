@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Maximize2, Server, Activity } from "lucide-react";
+import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Maximize2, Server, Activity, Save, Lock, Unlock, Move } from "lucide-react";
 
 interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null; }
 interface SipTrunk { id:string;name:string;ipbx_id:string;remote_ipbx_id:string|null;status:string;latency:number|null;channels:number|null;max_channels:number|null;provider:string|null;remote_ip:string|null;local_ip:string|null; }
