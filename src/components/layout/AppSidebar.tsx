@@ -15,6 +15,7 @@ import {
   Users,
   Settings,
   LogOut,
+  Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,6 +25,7 @@ const AppSidebar = () => {
 
   const navItems = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard", show: isAdmin || canView("dashboard") },
+    { to: "/network-map", icon: Map, label: "Network Map", show: isAdmin || canView("dashboard") },
     { to: "/countries", icon: Globe, label: "Pays", show: canView("dashboard_country") },
     { to: "/ipbx", icon: Server, label: "IPBX", show: canView("settings") },
     { to: "/sip-trunks", icon: Network, label: "SIP Trunks", show: canView("sip_trunks") },
