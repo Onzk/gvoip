@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Maximize2, Server, Activity } from "lucide-react";
 
 interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null; }
@@ -40,6 +42,10 @@ const autoLayout = (n:number,cx:number,cy:number):Pos[] => {
 
 const NetworkMap = () => {
   const {applyFilter,allowedIpbxIds,isAdmin,ready} = useAllowedIpbx();
+  const { isAdmin: adminCheck } = useAuth();
+  const { toast } = useToast();
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [ipbxList,setIpbxList] = useState<IPBX[]>([]);
   const [trunks,setTrunks]     = useState<SipTrunk[]>([]);
   const [pos,setPos]           = useState<Record<string,Pos>>({});
@@ -81,12 +87,24 @@ const NetworkMap = () => {
     });
 
     setIpbxList(nodes); setTrunks(enriched);
+    // Load saved positions from DB first
+    const { data: layout } = await supabase
+      .from("map_layouts")
+      .select("positions")
+      .eq("id", "network_map")
+      .single();
+    const savedPos: Record<string,Pos> = layout?.positions || {};
+
     setPos(prev=>{
       const next={...prev};
-      if(nodes.some(n=>!next[n.id])){
-        const p=autoLayout(nodes.length,W/2,H/2);
-        nodes.forEach((n,i)=>{if(!next[n.id])next[n.id]=p[i];});
-      }
+      nodes.forEach((n,i)=>{
+        if(savedPos[n.id]) {
+          next[n.id] = savedPos[n.id]; // use saved position
+        } else if(!next[n.id]) {
+          const p=autoLayout(nodes.length,W/2,H/2);
+          next[n.id] = p[i]; // fallback to auto
+        }
+      });
       return next;
     });
     setLoading(false);
@@ -94,6 +112,21 @@ const NetworkMap = () => {
 
   useEffect(()=>{if(ready)fetchData();},[ready,fetchData]);
   useEffect(()=>{if(!ready)return;const id=setInterval(fetchData,30000);return()=>clearInterval(id);},[ready,fetchData]);
+
+  const saveLayout = async () => {
+    setSaving(true);
+    try {
+      await supabase.from("map_layouts").upsert({
+        id: "network_map",
+        positions: pos,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+      toast({ title: "Disposition sauvegardée ✓", description: "Les positions ont été enregistrées." });
+    } catch(e) {
+      toast({ title: "Erreur", description: "Impossible de sauvegarder.", variant: "destructive" });
+    }
+    setSaving(false);
+  };
 
   const resetLayout=()=>{
     const p=autoLayout(ipbxList.length,W/2,H/2);
@@ -108,7 +141,10 @@ const NetworkMap = () => {
     const p=inv?pt.matrixTransform(inv):pt;
     return{x:(p.x-pan.x)/zoom,y:(p.y-pan.y)/zoom};
   };
+  const canDrag = isAdmin && editMode;
+
   const onNDown=(e:React.MouseEvent,id:string)=>{
+    if(!canDrag) return;
     e.stopPropagation();const p=getSVGPt(e);
     setDrag(id);setDragOff({x:p.x-(pos[id]?.x||0),y:p.y-(pos[id]?.y||0)});
   };
@@ -255,7 +291,7 @@ const NetworkMap = () => {
       <g key={ipbx.id} transform={`translate(${p.x},${p.y})`}
         onMouseDown={e=>onNDown(e,ipbx.id)}
         onMouseEnter={()=>setHN(ipbx.id)} onMouseLeave={()=>setHN(null)}
-        style={{cursor:isDrag?"grabbing":"grab"}}>
+        style={{cursor:canDrag?(isDrag?"grabbing":"grab"):"default"}}>
 
         {/* Pulse ring for online */}
         {ipbx.status==="online"&&(
@@ -344,6 +380,24 @@ const NetworkMap = () => {
             </div>
           ))}
           {/* Controls */}
+          {isAdmin && (
+            <button onClick={()=>setEditMode(e=>!e)} title={editMode?"Verrouiller":"Éditer positions"}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"0 12px",height:34,borderRadius:8,
+                border:`1px solid ${editMode?"#0ea5e9":"hsl(var(--border))"}`,
+                background:editMode?"#eff6ff":"hsl(var(--card))",
+                color:editMode?"#0ea5e9":"hsl(var(--muted-foreground))",
+                fontFamily:"Raleway,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              {editMode?<><Unlock size={13}/> Mode édition</>:<><Lock size={13}/> Positions</>}
+            </button>
+          )}
+          {isAdmin && editMode && (
+            <button onClick={saveLayout} disabled={saving} title="Sauvegarder la disposition"
+              style={{display:"flex",alignItems:"center",gap:6,padding:"0 12px",height:34,borderRadius:8,
+                border:"1px solid #10b981",background:"#f0fdf4",
+                color:"#10b981",fontFamily:"Raleway,sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              <Save size={13}/> {saving?"Sauvegarde...":"Sauvegarder"}
+            </button>
+          )}
           {[
             {I:ZoomIn,    a:()=>setZoom(z=>Math.min(4,z+0.25)),tip:"Zoom +"},
             {I:ZoomOut,   a:()=>setZoom(z=>Math.max(0.2,z-0.25)),tip:"Zoom -"},
@@ -361,6 +415,15 @@ const NetworkMap = () => {
 
       {/* Map */}
       <div style={{borderRadius:16,overflow:"hidden",border:"1px solid hsl(var(--border))",background:"hsl(var(--background))",boxShadow:"0 1px 8px rgba(0,0,0,0.08)",position:"relative",flex:full?1:undefined}}>
+        {/* Edit mode banner */}
+        {editMode && isAdmin && (
+          <div style={{position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",zIndex:3,
+            background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 16px",
+            fontSize:11,color:"#2563eb",fontFamily:"Raleway,sans-serif",fontWeight:600,
+            display:"flex",alignItems:"center",gap:6}}>
+            <Move size={12}/> Mode édition — glissez les nœuds pour les repositionner
+          </div>
+        )}
         {/* Dot grid */}
         <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:1}}>
           <defs>
