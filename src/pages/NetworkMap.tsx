@@ -1,516 +1,321 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
-import { RefreshCw, Maximize2, ZoomIn, ZoomOut, RotateCcw, Activity } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { motion, AnimatePresence } from "framer-motion";
+import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Activity, Maximize2 } from "lucide-react";
 
-// ── Types ──────────────────────────────────────────────────────────────────
-interface IPBX {
-  id: string;
-  name: string;
-  ip_address: string;
-  status: string;
-  ping_latency: number | null;
-  country_id: string | null;
-}
+interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null;country_id:string|null; }
+interface SipTrunk { id:string;name:string;ipbx_id:string;remote_ipbx_id:string|null;status:string;latency:number|null;channels:number|null;max_channels:number|null;provider:string|null; }
+interface NodePos { x:number;y:number; }
 
-interface SipTrunk {
-  id: string;
-  name: string;
-  ipbx_id: string;
-  remote_ipbx_id: string | null;
-  status: string;
-  latency: number | null;
-  channels: number | null;
-  max_channels: number | null;
-  provider: string | null;
-}
-
-interface NodePos { x: number; y: number; }
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-const statusColor = (s: string) => {
-  switch (s) {
-    case "online": case "up":       return "#22c55e";
-    case "offline": case "down":    return "#ef4444";
-    case "degraded": case "warning": return "#f59e0b";
-    default: return "#64748b";
-  }
+const NS:Record<string,{c:string;g:string;r:string}> = {
+  online:  {c:"#00e5ff",g:"rgba(0,229,255,0.55)", r:"rgba(0,229,255,0.18)"},
+  offline: {c:"#ff3d57",g:"rgba(255,61,87,0.55)",  r:"rgba(255,61,87,0.18)"},
+  _:       {c:"#f59e0b",g:"rgba(245,158,11,0.55)", r:"rgba(245,158,11,0.18)"},
 };
-
-const statusGlow = (s: string) => {
-  switch (s) {
-    case "online": case "up":       return "0 0 16px 4px rgba(34,197,94,0.5)";
-    case "offline": case "down":    return "0 0 16px 4px rgba(239,68,68,0.5)";
-    case "degraded": case "warning": return "0 0 16px 4px rgba(245,158,11,0.5)";
-    default: return "none";
-  }
+const TS:Record<string,{c:string;d:string}> = {
+  up:   {c:"#00e5ff",d:"none"},
+  down: {c:"#ff3d57",d:"8,5"},
+  _:    {c:"#f59e0b",d:"4,3"},
 };
+const ns = (s:string) => NS[s]||NS._;
+const ts = (s:string) => TS[s]||TS._;
 
-const trunkColor = (s: string, latency: number | null) => {
-  if (s === "down") return "#ef4444";
-  if (latency && latency > 100) return "#f59e0b";
-  if (s === "up") return "#22c55e";
-  return "#64748b";
-};
-
-// Auto-layout: place nodes in a circle
-const autoLayout = (count: number, cx: number, cy: number, r: number): NodePos[] => {
-  if (count === 0) return [];
-  if (count === 1) return [{ x: cx, y: cy }];
-  return Array.from({ length: count }, (_, i) => ({
-    x: cx + r * Math.cos((2 * Math.PI * i) / count - Math.PI / 2),
-    y: cy + r * Math.sin((2 * Math.PI * i) / count - Math.PI / 2),
+const autoLayout = (n:number,cx:number,cy:number):NodePos[] => {
+  if(!n) return [];
+  if(n===1) return [{x:cx,y:cy}];
+  const r=Math.min(270,110+n*32);
+  return Array.from({length:n},(_,i)=>({
+    x:cx+r*Math.cos(2*Math.PI*i/n-Math.PI/2),
+    y:cy+r*Math.sin(2*Math.PI*i/n-Math.PI/2),
   }));
 };
 
-// ── Tooltip ────────────────────────────────────────────────────────────────
-const Tooltip = ({ x, y, children }: { x: number; y: number; children: React.ReactNode }) => (
-  <foreignObject x={x + 12} y={y - 10} width={200} height={120} style={{ overflow: "visible" }}>
-    <div style={{
-      background: "#0f172a",
-      border: "1px solid #1e293b",
-      borderRadius: 8,
-      padding: "8px 12px",
-      fontSize: 11,
-      color: "#e2e8f0",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-      whiteSpace: "nowrap",
-      width: "fit-content",
-    }}>
-      {children}
-    </div>
-  </foreignObject>
-);
-
-// ── Main Component ─────────────────────────────────────────────────────────
 const NetworkMap = () => {
-  const { applyFilter, allowedIpbxIds, isAdmin, ready } = useAllowedIpbx();
-  const [ipbxList, setIpbxList] = useState<IPBX[]>([]);
-  const [trunks, setTrunks] = useState<SipTrunk[]>([]);
-  const [positions, setPositions] = useState<Record<string, NodePos>>({});
-  const [loading, setLoading] = useState(true);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [hoveredTrunk, setHoveredTrunk] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState(new Date());
-  const svgRef = useRef<SVGSVGElement>(null);
-  const WIDTH = 1200;
-  const HEIGHT = 700;
+  const {applyFilter,allowedIpbxIds,isAdmin,ready} = useAllowedIpbx();
+  const [ipbxList,setIpbxList]=useState<IPBX[]>([]);
+  const [trunks,setTrunks]=useState<SipTrunk[]>([]);
+  const [pos,setPos]=useState<Record<string,NodePos>>({});
+  const [loading,setLoading]=useState(true);
+  const [zoom,setZoom]=useState(1);
+  const [pan,setPan]=useState({x:0,y:0});
+  const [drag,setDrag]=useState<string|null>(null);
+  const [dragOff,setDragOff]=useState({x:0,y:0});
+  const [panning,setPanning]=useState(false);
+  const [panStart,setPanStart]=useState({x:0,y:0});
+  const [hN,setHN]=useState<string|null>(null);
+  const [hT,setHT]=useState<string|null>(null);
+  const [tick,setTick]=useState(0);
+  const [full,setFull]=useState(false);
+  const svgRef=useRef<SVGSVGElement>(null);
+  const W=1100,H=600;
 
-  // ── Fetch data ───────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
+  useEffect(()=>{const id=setInterval(()=>setTick(t=>(t+1)%2000),25);return()=>clearInterval(id);},[]);
+
+  const fetchData=useCallback(async()=>{
     setLoading(true);
-    let ipbxQ: any = supabase.from("ipbx").select("id,name,ip_address,status,ping_latency,country_id");
-    if (!isAdmin && allowedIpbxIds && allowedIpbxIds.length > 0)
-      ipbxQ = ipbxQ.in("id", allowedIpbxIds);
-    else if (!isAdmin && allowedIpbxIds !== null)
-      ipbxQ = ipbxQ.in("id", ["00000000-0000-0000-0000-000000000000"]);
-
-    const [ipbxRes, trunkRes] = await Promise.all([
-      ipbxQ,
-      applyFilter(supabase.from("sip_trunks").select("id,name,ipbx_id,remote_ipbx_id,status,latency,channels,max_channels,provider")),
-    ]);
-
-    const newIpbx: IPBX[] = ipbxRes.data || [];
-    setIpbxList(newIpbx);
-    setTrunks(trunkRes.data || []);
-
-    // Init positions only for new nodes
-    setPositions(prev => {
-      const next = { ...prev };
-      const newNodes = newIpbx.filter(i => !next[i.id]);
-      if (newNodes.length > 0) {
-        const positions = autoLayout(newIpbx.length, WIDTH / 2, HEIGHT / 2, Math.min(220, 80 + newIpbx.length * 30));
-        newIpbx.forEach((ipbx, i) => {
-          if (!next[ipbx.id]) next[ipbx.id] = positions[i];
-        });
-      }
+    let q:any=supabase.from("ipbx").select("id,name,ip_address,status,ping_latency,country_id");
+    if(!isAdmin&&allowedIpbxIds?.length) q=q.in("id",allowedIpbxIds);
+    else if(!isAdmin&&allowedIpbxIds!==null) q=q.in("id",["00000000-0000-0000-0000-000000000000"]);
+    const [r1,r2]=await Promise.all([q,
+      applyFilter(supabase.from("sip_trunks").select("id,name,ipbx_id,remote_ipbx_id,status,latency,channels,max_channels,provider"))]);
+    const nodes:IPBX[]=r1.data||[];
+    setIpbxList(nodes); setTrunks(r2.data||[]);
+    setPos(prev=>{
+      const next={...prev};
+      const fresh=nodes.filter(n=>!next[n.id]);
+      if(fresh.length){const p=autoLayout(nodes.length,W/2,H/2-20);nodes.forEach((n,i)=>{if(!next[n.id])next[n.id]=p[i];});}
       return next;
     });
-
-    setLastUpdate(new Date());
     setLoading(false);
-  }, [isAdmin, allowedIpbxIds, applyFilter]);
+  },[isAdmin,allowedIpbxIds,applyFilter]);
 
-  useEffect(() => { if (ready) fetchData(); }, [ready, fetchData]);
-  useEffect(() => {
-    if (!ready) return;
-    const i = setInterval(fetchData, 30000);
-    return () => clearInterval(i);
-  }, [ready, fetchData]);
+  useEffect(()=>{if(ready)fetchData();},[ready,fetchData]);
+  useEffect(()=>{if(!ready)return;const id=setInterval(fetchData,30000);return()=>clearInterval(id);},[ready,fetchData]);
 
-  // ── Auto-layout reset ─────────────────────────────────────────────────────
-  const resetLayout = () => {
-    const pos = autoLayout(ipbxList.length, WIDTH / 2, HEIGHT / 2, Math.min(220, 80 + ipbxList.length * 30));
-    const next: Record<string, NodePos> = {};
-    ipbxList.forEach((ipbx, i) => { next[ipbx.id] = pos[i]; });
-    setPositions(next);
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+  const resetLayout=()=>{
+    const p=autoLayout(ipbxList.length,W/2,H/2-20);
+    const next:Record<string,NodePos>={};
+    ipbxList.forEach((n,i)=>{next[n.id]=p[i];});
+    setPos(next);setZoom(1);setPan({x:0,y:0});
   };
 
-  // ── Node drag ─────────────────────────────────────────────────────────────
-  const onNodeMouseDown = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    const svgPt = getSVGPoint(e);
-    setDragging(id);
-    setDragOffset({
-      x: svgPt.x - (positions[id]?.x || 0),
-      y: svgPt.y - (positions[id]?.y || 0),
-    });
+  const getSVGPt=(e:React.MouseEvent)=>{
+    const svg=svgRef.current;if(!svg)return{x:0,y:0};
+    const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;
+    const inv=svg.getScreenCTM()?.inverse();
+    const p=inv?pt.matrixTransform(inv):pt;
+    return{x:(p.x-pan.x)/zoom,y:(p.y-pan.y)/zoom};
   };
-
-  const getSVGPoint = (e: React.MouseEvent) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-    const inv = ctm.inverse();
-    const svgPt = pt.matrixTransform(inv);
-    return { x: (svgPt.x - pan.x) / zoom, y: (svgPt.y - pan.y) / zoom };
+  const onNDown=(e:React.MouseEvent,id:string)=>{
+    e.stopPropagation();const p=getSVGPt(e);
+    setDrag(id);setDragOff({x:p.x-(pos[id]?.x||0),y:p.y-(pos[id]?.y||0)});
   };
-
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (dragging) {
-      const svgPt = getSVGPoint(e);
-      setPositions(prev => ({
-        ...prev,
-        [dragging]: { x: svgPt.x - dragOffset.x, y: svgPt.y - dragOffset.y },
-      }));
-    } else if (isPanning) {
-      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
+  const onMove=(e:React.MouseEvent)=>{
+    if(drag){const p=getSVGPt(e);setPos(prev=>({...prev,[drag]:{x:p.x-dragOff.x,y:p.y-dragOff.y}}));}
+    else if(panning)setPan({x:e.clientX-panStart.x,y:e.clientY-panStart.y});
+  };
+  const onUp=()=>{setDrag(null);setPanning(false);};
+  const onSDown=(e:React.MouseEvent)=>{
+    const t=e.target as SVGElement;
+    if(t===svgRef.current||["rect","svg"].includes(t.tagName)){
+      setPanning(true);setPanStart({x:e.clientX-pan.x,y:e.clientY-pan.y});
     }
   };
+  const onWheel=(e:React.WheelEvent)=>{e.preventDefault();setZoom(z=>Math.max(0.2,Math.min(4,z-e.deltaY*0.001)));};
 
-  const onMouseUp = () => { setDragging(null); setIsPanning(false); };
+  const online=ipbxList.filter(i=>i.status==="online").length;
+  const offline=ipbxList.filter(i=>i.status==="offline").length;
+  const tUp=trunks.filter(t=>t.status==="up").length;
+  const tDown=trunks.filter(t=>t.status==="down").length;
+  const activeCh=trunks.reduce((a,t)=>a+(t.channels||0),0);
+  const avgLat=trunks.filter(t=>t.latency).length?Math.round(trunks.reduce((a,t)=>a+(t.latency||0),0)/trunks.filter(t=>t.latency).length):null;
 
-  const onSvgMouseDown = (e: React.MouseEvent) => {
-    if (e.target === svgRef.current || (e.target as SVGElement).tagName === "rect") {
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    }
-  };
+  const TT=({x,y,children}:{x:number;y:number;children:React.ReactNode})=>(
+    <foreignObject x={x} y={y} width={180} height={120} style={{overflow:"visible"}}>
+      <div style={{background:"rgba(3,10,28,0.97)",border:"1px solid rgba(0,229,255,0.25)",borderRadius:7,padding:"7px 11px",fontSize:10,color:"#e2e8f0",whiteSpace:"nowrap",width:"fit-content"}}>
+        {children}
+      </div>
+    </foreignObject>
+  );
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom(z => Math.max(0.3, Math.min(3, z - e.deltaY * 0.001)));
-  };
+  const renderTrunks=()=>trunks.map(t=>{
+    const src=pos[t.ipbx_id];
+    const dst=t.remote_ipbx_id?pos[t.remote_ipbx_id]:null;
+    if(!src)return null;
+    const style=ts(t.status);
+    const isH=hT===t.id;
+    const latC=t.latency&&t.latency>100?"#f59e0b":style.c;
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const stats = {
-    total: ipbxList.length,
-    online: ipbxList.filter(i => i.status === "online").length,
-    offline: ipbxList.filter(i => i.status === "offline").length,
-    trunksUp: trunks.filter(t => t.status === "up").length,
-    trunksDown: trunks.filter(t => t.status === "down").length,
-  };
-
-  // ── Render trunks as SVG lines ────────────────────────────────────────────
-  const renderTrunks = () => trunks.map(trunk => {
-    const src = positions[trunk.ipbx_id];
-    const dstId = trunk.remote_ipbx_id;
-    const dst = dstId ? positions[dstId] : null;
-    if (!src) return null;
-
-    // External trunk (no remote IPBX) — draw a line going out
-    if (!dst) {
-      const angle = Object.keys(positions).indexOf(trunk.ipbx_id) * 45;
-      const rad = angle * Math.PI / 180;
-      const endX = src.x + Math.cos(rad) * 80;
-      const endY = src.y + Math.sin(rad) * 80;
-      const color = trunkColor(trunk.status, trunk.latency);
-      const isHovered = hoveredTrunk === trunk.id;
-
-      return (
-        <g key={trunk.id} onMouseEnter={() => setHoveredTrunk(trunk.id)} onMouseLeave={() => setHoveredTrunk(null)}>
-          <line x1={src.x} y1={src.y} x2={endX} y2={endY}
-            stroke={color} strokeWidth={isHovered ? 3 : 2}
-            strokeDasharray={trunk.status === "down" ? "6 4" : "none"}
-            strokeOpacity={0.8} />
-          <circle cx={endX} cy={endY} r={5} fill={color} opacity={0.7} />
-          {/* Latency label */}
-          {trunk.latency && (
-            <text x={(src.x + endX) / 2} y={(src.y + endY) / 2 - 6}
-              fill={color} fontSize={9} textAnchor="middle" fontFamily="JetBrains Mono">
-              {trunk.latency}ms
-            </text>
-          )}
-          {isHovered && (
-            <Tooltip x={(src.x + endX) / 2} y={(src.y + endY) / 2}>
-              <div style={{ fontWeight: 700, marginBottom: 3, color }}>{trunk.name}</div>
-              <div style={{ color: "#94a3b8" }}>Provider: {trunk.provider || "—"}</div>
-              <div style={{ color: "#94a3b8" }}>Latence: {trunk.latency ? `${trunk.latency}ms` : "—"}</div>
-              <div style={{ color: "#94a3b8" }}>Canaux: {trunk.channels ?? 0}/{trunk.max_channels ?? 30}</div>
-            </Tooltip>
-          )}
+    if(!dst){
+      const ang=(Object.keys(pos).indexOf(t.ipbx_id)*55)*(Math.PI/180);
+      const ex=src.x+Math.cos(ang)*65,ey=src.y+Math.sin(ang)*65;
+      return(
+        <g key={t.id} onMouseEnter={()=>setHT(t.id)} onMouseLeave={()=>setHT(null)}>
+          <line x1={src.x} y1={src.y} x2={ex} y2={ey} stroke={style.c} strokeWidth={isH?2.5:1.5} strokeDasharray={style.d} strokeOpacity={0.65}/>
+          <circle cx={ex} cy={ey} r={4} fill={style.c} opacity={0.5}/>
+          {t.latency&&<text x={(src.x+ex)/2} y={(src.y+ey)/2-5} fill={style.c} fontSize={8} textAnchor="middle" fontFamily="JetBrains Mono">{t.latency}ms</text>}
+          {isH&&<TT x={ex+8} y={ey-10}><div style={{fontWeight:700,color:style.c,marginBottom:3}}>{t.name}</div><div style={{color:"#64748b"}}>Provider: {t.provider||"—"}</div><div style={{color:"#64748b"}}>Canaux: {t.channels??0}/{t.max_channels??30}</div></TT>}
         </g>
       );
     }
 
-    // Inter-IPBX trunk — curved line
-    const color = trunkColor(trunk.status, trunk.latency);
-    const isHovered = hoveredTrunk === trunk.id;
-    const mx = (src.x + dst.x) / 2;
-    const my = (src.y + dst.y) / 2 - 40;
-    const path = `M ${src.x} ${src.y} Q ${mx} ${my} ${dst.x} ${dst.y}`;
+    const mx=(src.x+dst.x)/2,my=(src.y+dst.y)/2-55;
+    const path=`M ${src.x} ${src.y} Q ${mx} ${my} ${dst.x} ${dst.y}`;
+    const prog=((tick*0.0028+(t.ipbx_id.charCodeAt(0)*0.07))%1);
+    const px=(1-prog)*(1-prog)*src.x+2*(1-prog)*prog*mx+prog*prog*dst.x;
+    const py=(1-prog)*(1-prog)*src.y+2*(1-prog)*prog*my+prog*prog*dst.y;
 
-    return (
-      <g key={trunk.id} onMouseEnter={() => setHoveredTrunk(trunk.id)} onMouseLeave={() => setHoveredTrunk(null)}>
-        {/* Glow effect */}
-        {trunk.status === "up" && (
-          <path d={path} fill="none" stroke={color} strokeWidth={6} strokeOpacity={0.15} />
-        )}
-        <path d={path} fill="none" stroke={color}
-          strokeWidth={isHovered ? 3 : 2}
-          strokeDasharray={trunk.status === "down" ? "8 5" : "none"}
-          strokeOpacity={0.9} />
-        {/* Animated packet dot */}
-        {trunk.status === "up" && (
-          <circle r={3} fill={color} opacity={0.9}>
-            <animateMotion dur={`${2 + Math.random() * 2}s`} repeatCount="indefinite" path={path} />
-          </circle>
-        )}
-        {/* Labels */}
-        <text x={mx} y={my - 8} fill={color} fontSize={9} textAnchor="middle" fontFamily="JetBrains Mono">
-          {trunk.latency ? `${trunk.latency}ms` : trunk.name}
-        </text>
-        {trunk.channels !== null && trunk.channels > 0 && (
-          <text x={mx} y={my + 4} fill="#94a3b8" fontSize={8} textAnchor="middle">
-            {trunk.channels} ch
-          </text>
-        )}
-        {isHovered && (
-          <Tooltip x={mx} y={my}>
-            <div style={{ fontWeight: 700, marginBottom: 3, color }}>{trunk.name}</div>
-            <div style={{ color: "#94a3b8" }}>Statut: <span style={{ color }}>{trunk.status}</span></div>
-            <div style={{ color: "#94a3b8" }}>Latence: {trunk.latency ? `${trunk.latency}ms` : "—"}</div>
-            <div style={{ color: "#94a3b8" }}>Canaux: {trunk.channels ?? 0}/{trunk.max_channels ?? 30}</div>
-          </Tooltip>
-        )}
+    return(
+      <g key={t.id} onMouseEnter={()=>setHT(t.id)} onMouseLeave={()=>setHT(null)}>
+        <path d={path} fill="none" stroke={style.c} strokeWidth={10} strokeOpacity={0.04}/>
+        <path d={path} fill="none" stroke={style.c} strokeWidth={5} strokeOpacity={0.08}/>
+        <path d={path} fill="none" stroke={latC} strokeWidth={isH?2.5:1.5} strokeDasharray={style.d} strokeOpacity={0.8}/>
+        {t.status==="up"&&<>
+          <circle cx={px} cy={py} r={3.5} fill={style.c} opacity={0.95}/>
+          <circle cx={px} cy={py} r={7} fill={style.c} opacity={0.15}/>
+        </>}
+        <rect x={mx-20} y={my-9} width={40} height={14} rx={4} fill="rgba(3,10,28,0.85)" stroke={latC} strokeWidth={0.5} strokeOpacity={0.5}/>
+        <text x={mx} y={my+1} fill={latC} fontSize={8} textAnchor="middle" fontFamily="JetBrains Mono">{t.latency?`${t.latency}ms`:t.name.slice(0,7)}</text>
+        {isH&&<TT x={mx+10} y={my-15}><div style={{fontWeight:700,color:latC,marginBottom:4}}>{t.name}</div><div style={{color:"#64748b"}}>Statut: <span style={{color:style.c}}>{t.status}</span></div><div style={{color:"#64748b"}}>Latence: {t.latency?`${t.latency}ms`:"—"}</div><div style={{color:"#64748b"}}>Canaux: {t.channels??0}/{t.max_channels??30}</div>{t.provider&&<div style={{color:"#64748b"}}>Provider: {t.provider}</div>}</TT>}
       </g>
     );
   });
 
-  // ── Render IPBX nodes ─────────────────────────────────────────────────────
-  const renderNodes = () => ipbxList.map(ipbx => {
-    const pos = positions[ipbx.id];
-    if (!pos) return null;
-    const color = statusColor(ipbx.status);
-    const isHovered = hoveredNode === ipbx.id;
-    const isDragged = dragging === ipbx.id;
-    const r = 32;
-
-    return (
-      <g key={ipbx.id}
-        transform={`translate(${pos.x}, ${pos.y})`}
-        onMouseDown={(e) => onNodeMouseDown(e, ipbx.id)}
-        onMouseEnter={() => setHoveredNode(ipbx.id)}
-        onMouseLeave={() => setHoveredNode(null)}
-        style={{ cursor: isDragged ? "grabbing" : "grab" }}>
-
-        {/* Outer glow ring */}
-        <circle r={r + 8} fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.2} />
-        <circle r={r + 4} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0.15} />
-
-        {/* Pulse animation for online */}
-        {ipbx.status === "online" && (
-          <circle r={r + 12} fill="none" stroke={color} strokeWidth={1} strokeOpacity={0}>
-            <animate attributeName="r" from={r} to={r + 20} dur="2s" repeatCount="indefinite" />
-            <animate attributeName="stroke-opacity" from={0.5} to={0} dur="2s" repeatCount="indefinite" />
+  const renderNodes=()=>ipbxList.map(ipbx=>{
+    const p=pos[ipbx.id];if(!p)return null;
+    const n=ns(ipbx.status);
+    const isH=hN===ipbx.id,isDrag=drag===ipbx.id;
+    const nodeTrunks=trunks.filter(t=>t.ipbx_id===ipbx.id);
+    const ch=nodeTrunks.reduce((a,t)=>a+(t.channels||0),0);
+    const bars=Math.min(ch,5);
+    return(
+      <g key={ipbx.id} transform={`translate(${p.x},${p.y})`}
+        onMouseDown={e=>onNDown(e,ipbx.id)}
+        onMouseEnter={()=>setHN(ipbx.id)} onMouseLeave={()=>setHN(null)}
+        style={{cursor:isDrag?"grabbing":"grab"}}>
+        {ipbx.status==="online"&&(
+          <circle r={45} fill="none" stroke={n.c} strokeWidth={0.5} strokeOpacity={0.1}>
+            <animate attributeName="r" values="32;55;32" dur="3.5s" repeatCount="indefinite"/>
+            <animate attributeName="stroke-opacity" values="0.25;0;0.25" dur="3.5s" repeatCount="indefinite"/>
           </circle>
         )}
-
-        {/* Main circle */}
-        <circle r={r} fill="#0f172a" stroke={color} strokeWidth={isDragged || isHovered ? 3 : 2}
-          style={{ filter: `drop-shadow(${statusGlow(ipbx.status)})` }} />
-
-        {/* Server icon */}
-        <text y={-4} textAnchor="middle" fontSize={16} fill={color}>⬡</text>
-        <text y={8} textAnchor="middle" fontSize={7} fill={color} fontFamily="JetBrains Mono" fontWeight="700">
-          IPBX
-        </text>
-
-        {/* Status dot */}
-        <circle cx={r - 6} cy={-(r - 6)} r={5} fill={color}>
-          {ipbx.status === "online" && (
-            <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
-          )}
-        </circle>
-
-        {/* Name label */}
-        <text y={r + 16} textAnchor="middle" fontSize={11} fill="#e2e8f0"
-          fontFamily="JetBrains Mono" fontWeight="600">
-          {ipbx.name}
-        </text>
-        <text y={r + 28} textAnchor="middle" fontSize={9} fill="#64748b" fontFamily="JetBrains Mono">
-          {ipbx.ip_address || "—"}
-        </text>
-
-        {/* Hover tooltip */}
-        {isHovered && !isDragged && (
-          <Tooltip x={r + 4} y={-r}>
-            <div style={{ fontWeight: 700, marginBottom: 4, color }}>{ipbx.name}</div>
-            <div style={{ color: "#94a3b8" }}>IP: <span style={{ color: "#e2e8f0" }}>{ipbx.ip_address}</span></div>
-            <div style={{ color: "#94a3b8" }}>Statut: <span style={{ color }}>{ipbx.status}</span></div>
-            {ipbx.ping_latency && <div style={{ color: "#94a3b8" }}>Ping: <span style={{ color: "#22c55e" }}>{ipbx.ping_latency}ms</span></div>}
-            <div style={{ color: "#94a3b8", marginTop: 4, fontSize: 9 }}>
-              {trunks.filter(t => t.ipbx_id === ipbx.id).length} trunk(s)
-            </div>
-          </Tooltip>
-        )}
-      </g>
-    );
-  });
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Activity size={20} className="text-primary" />
-            Network Map
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Topologie VoIP en temps réel — {lastUpdate.toLocaleTimeString("fr-FR")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Stats pills */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/10 text-success text-xs font-mono font-semibold">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse inline-block" />
-            {stats.online} online
-          </div>
-          {stats.offline > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-mono font-semibold">
-              <span className="w-2 h-2 rounded-full bg-destructive inline-block" />
-              {stats.offline} offline
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-mono font-semibold">
-            {stats.trunksUp}/{stats.trunksUp + stats.trunksDown} trunks UP
-          </div>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom(z => Math.min(3, z + 0.2))}>
-              <ZoomIn size={13} />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}>
-              <ZoomOut size={13} />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={resetLayout} title="Reset layout">
-              <RotateCcw size={13} />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={fetchData} disabled={loading}>
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        {[
-          { color: "#22c55e", label: "En ligne / UP" },
-          { color: "#ef4444", label: "Hors ligne / DOWN" },
-          { color: "#f59e0b", label: "Dégradé / Latence élevée" },
-          { color: "#64748b", label: "Inconnu" },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 inline-block rounded" style={{ background: color }} />
-            {label}
-          </div>
+        <circle r={26} fill={n.r}/>
+        <circle r={24} fill="none" stroke={n.c} strokeWidth={0.5} strokeOpacity={0.35}/>
+        <circle r={20} fill="none" stroke={n.c} strokeWidth={1} strokeOpacity={0.6}/>
+        <circle r={16} fill="#030a1c" stroke={n.c} strokeWidth={isH?2:1.5}
+          style={{filter:`drop-shadow(0 0 10px ${n.g})`}}/>
+        <polygon points="0,-8 7,-4 7,4 0,8 -7,4 -7,-4"
+          fill="none" stroke={n.c} strokeWidth={1} strokeOpacity={0.8}/>
+        <circle r={2.5} fill={n.c} opacity={0.9}/>
+        {ch>0&&Array.from({length:bars}).map((_,i)=>(
+          <rect key={i} x={-9+i*4.5} y={-30+(3-i)*-1.5} width={3.5} height={7+i*2.5} rx={1} fill={n.c} opacity={0.35+i*0.13}/>
         ))}
-        <span className="ml-2">• Glisser les nœuds • Molette pour zoomer • Cliquer-glisser pour panoramique</span>
-      </div>
-
-      {/* Map canvas */}
-      <div className="noc-card border border-border overflow-hidden rounded-xl"
-        style={{ background: "linear-gradient(135deg, hsl(220,20%,5%), hsl(220,18%,8%))", position: "relative" }}>
-
-        {/* Grid background */}
-        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.15 }}>
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#334155" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-
-        {loading && ipbxList.length === 0 ? (
-          <div className="flex items-center justify-center" style={{ height: 500 }}>
-            <div className="text-center space-y-3">
-              <RefreshCw size={24} className="animate-spin text-primary mx-auto" />
-              <p className="text-muted-foreground text-sm">Chargement de la topologie...</p>
+        <circle cx={14} cy={-14} r={3.5} fill={n.c}>
+          {ipbx.status==="online"&&<animate attributeName="opacity" values="1;0.25;1" dur="1.6s" repeatCount="indefinite"/>}
+        </circle>
+        <text y={30} textAnchor="middle" fontSize={10.5} fill="#dde4f0" fontFamily="JetBrains Mono" fontWeight="600">{ipbx.name}</text>
+        <text y={41} textAnchor="middle" fontSize={8} fill="#3d5068" fontFamily="JetBrains Mono">{ipbx.ip_address||"—"}</text>
+        {ipbx.ping_latency&&<text y={51} textAnchor="middle" fontSize={7.5} fill={n.c} fontFamily="JetBrains Mono" opacity={0.75}>{ipbx.ping_latency}ms</text>}
+        {isH&&!isDrag&&(
+          <TT x={24} y={-25}>
+            <div style={{fontWeight:700,fontSize:11,color:n.c,marginBottom:5}}>{ipbx.name}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 10px",color:"#64748b"}}>
+              <span>Statut</span><span style={{color:n.c}}>{ipbx.status}</span>
+              <span>IP</span><span style={{color:"#94a3b8"}}>{ipbx.ip_address||"—"}</span>
+              <span>Ping</span><span style={{color:"#94a3b8"}}>{ipbx.ping_latency?`${ipbx.ping_latency}ms`:"—"}</span>
+              <span>Trunks</span><span style={{color:"#94a3b8"}}>{nodeTrunks.length}</span>
+              <span>Canaux</span><span style={{color:"#94a3b8"}}>{ch}</span>
             </div>
-          </div>
-        ) : ipbxList.length === 0 ? (
-          <div className="flex items-center justify-center" style={{ height: 500 }}>
-            <div className="text-center space-y-2">
-              <p className="text-muted-foreground">Aucun IPBX configuré</p>
-              <p className="text-xs text-muted-foreground">Ajoutez des IPBX dans la section IPBX</p>
-            </div>
-          </div>
-        ) : (
-          <svg
-            ref={svgRef}
-            width="100%"
-            height={560}
-            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-            style={{ cursor: isPanning ? "grabbing" : "default" }}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            onMouseDown={onSvgMouseDown}
-            onWheel={onWheel}
-          >
-            <defs>
-              {/* Radial gradient for nodes */}
-              <radialGradient id="nodeGrad" cx="50%" cy="30%" r="70%">
-                <stop offset="0%" stopColor="#1e293b" />
-                <stop offset="100%" stopColor="#0f172a" />
-              </radialGradient>
-              {/* Arrow marker */}
-              <marker id="arrow-green" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="#22c55e" />
-              </marker>
-              <marker id="arrow-red" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="#ef4444" />
-              </marker>
-            </defs>
-
-            <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-              {/* Trunks (behind nodes) */}
-              {renderTrunks()}
-              {/* Nodes (on top) */}
-              {renderNodes()}
-            </g>
-          </svg>
+          </TT>
         )}
+      </g>
+    );
+  });
 
-        {/* Zoom indicator */}
-        <div style={{
-          position: "absolute", bottom: 12, right: 12,
-          background: "rgba(15,23,42,0.8)",
-          border: "1px solid #1e293b",
-          borderRadius: 6, padding: "4px 10px",
-          fontSize: 11, color: "#64748b", fontFamily: "JetBrains Mono",
-        }}>
-          {Math.round(zoom * 100)}%
+  const cs:React.CSSProperties=full?{position:"fixed",inset:0,zIndex:9999,background:"#020a1b",display:"flex",flexDirection:"column",padding:16}:{};
+  const stats=[
+    {l:"IPBX Online",v:online,c:"#00e5ff"},
+    {l:"IPBX Offline",v:offline,c:"#ff3d57"},
+    {l:"Trunks UP",v:`${tUp}/${tUp+tDown}`,c:"#00e5ff"},
+    {l:"Latence moy.",v:avgLat?`${avgLat}ms`:"—",c:avgLat&&avgLat>100?"#f59e0b":"#00e5ff"},
+    {l:"Canaux actifs",v:activeCh,c:"#f59e0b"},
+  ];
+
+  return(
+    <div style={cs}>
+      <div className={full?"":"space-y-3"} style={full?{display:"flex",flexDirection:"column",gap:12,height:"100%"}:{}}>
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Activity size={18} className="text-primary"/> Network Map
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono">Topologie VoIP temps réel</p>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {[{l:`${online} online`,bg:"rgba(0,229,255,0.08)",c:"#00e5ff",show:true},
+              {l:`${offline} offline`,bg:"rgba(255,61,87,0.08)",c:"#ff3d57",show:offline>0},
+              {l:`${tUp}/${tUp+tDown} trunks UP`,bg:"rgba(0,229,255,0.06)",c:"#00e5ff",show:true},
+            ].filter(p=>p.show).map(p=>(
+              <div key={p.l} style={{background:p.bg,border:`1px solid ${p.c}33`,color:p.c,borderRadius:20,padding:"3px 11px",fontSize:11,fontFamily:"JetBrains Mono",fontWeight:600}}>
+                {p.l}
+              </div>
+            ))}
+            <div style={{display:"flex",gap:5}}>
+              {[{I:ZoomIn,a:()=>setZoom(z=>Math.min(4,z+0.25))},
+                {I:ZoomOut,a:()=>setZoom(z=>Math.max(0.2,z-0.25))},
+                {I:RotateCcw,a:resetLayout},
+                {I:RefreshCw,a:fetchData},
+                {I:Maximize2,a:()=>setFull(f=>!f)},
+              ].map(({I,a},i)=>(
+                <button key={i} onClick={a} style={{width:30,height:30,borderRadius:6,border:"1px solid rgba(0,229,255,0.15)",background:"rgba(0,229,255,0.04)",color:"#64748b",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                  <I size={13}/>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(0,229,255,0.1)",background:"linear-gradient(150deg,#020a1b,#030d1f,#040f23)",flex:full?1:undefined}}>
+          <div style={{position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,229,255,0.012) 3px,rgba(0,229,255,0.012) 4px)",pointerEvents:"none",zIndex:1}}/>
+          <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0.2}}>
+            <defs>
+              <pattern id="gsm" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0L0 0 0 28" fill="none" stroke="#0b1e38" strokeWidth="0.5"/></pattern>
+              <pattern id="glg" width="112" height="112" patternUnits="userSpaceOnUse"><path d="M112 0L0 0 0 112" fill="none" stroke="#0d2244" strokeWidth="0.8"/></pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#gsm)"/>
+            <rect width="100%" height="100%" fill="url(#glg)"/>
+          </svg>
+          {loading&&!ipbxList.length?(
+            <div style={{height:480,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",zIndex:2}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{width:38,height:38,border:"2px solid rgba(0,229,255,0.15)",borderTop:"2px solid #00e5ff",borderRadius:"50%",animation:"nspin 1s linear infinite",margin:"0 auto 12px"}}/>
+                <p style={{color:"#3d5068",fontSize:12,fontFamily:"JetBrains Mono"}}>Chargement topologie...</p>
+              </div>
+            </div>
+          ):ipbxList.length===0?(
+            <div style={{height:480,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",zIndex:2}}>
+              <p style={{color:"#3d5068",fontSize:13}}>Aucun IPBX configuré</p>
+            </div>
+          ):(
+            <svg ref={svgRef} width="100%" height={full?"calc(100vh - 200px)":480}
+              viewBox={`0 0 ${W} ${H}`}
+              style={{cursor:panning?"grabbing":"default",position:"relative",zIndex:2}}
+              onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+              onMouseDown={onSDown} onWheel={onWheel}>
+              <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+                {renderTrunks()}{renderNodes()}
+              </g>
+            </svg>
+          )}
+          <div style={{position:"absolute",bottom:10,right:12,zIndex:3,background:"rgba(3,10,28,0.85)",border:"1px solid rgba(0,229,255,0.12)",borderRadius:5,padding:"3px 8px",fontSize:10,color:"#3d5068",fontFamily:"JetBrains Mono"}}>
+            {Math.round(zoom*100)}%
+          </div>
+        </div>
+
+        {/* Stats bar */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
+          {stats.map(s=>(
+            <div key={s.l} style={{background:"rgba(3,10,28,0.85)",border:"1px solid rgba(0,229,255,0.08)",borderRadius:10,padding:"10px 14px"}}>
+              <p style={{fontSize:9,color:"#3d5068",fontFamily:"JetBrains Mono",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>{s.l}</p>
+              <p style={{fontSize:21,fontWeight:700,color:s.c,fontFamily:"JetBrains Mono",lineHeight:1}}>{s.v}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div style={{display:"flex",gap:18,fontSize:10,color:"#3d5068",fontFamily:"JetBrains Mono",flexWrap:"wrap"}}>
+          {[{c:"#00e5ff",l:"Online / UP"},{c:"#ff3d57",l:"Offline / DOWN"},{c:"#f59e0b",l:"Latence > 100ms"}].map(x=>(
+            <div key={x.l} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:18,height:2,background:x.c,borderRadius:1}}/>{x.l}
+            </div>
+          ))}
+          <span style={{marginLeft:"auto",opacity:0.5}}>Glisser nœuds · Molette zoomer · Drag fond = panoramique</span>
         </div>
       </div>
+      <style>{`@keyframes nspin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 };
-
 export default NetworkMap;
