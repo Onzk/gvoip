@@ -1,29 +1,37 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
-import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Activity, Maximize2 } from "lucide-react";
+import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Maximize2, Server, Activity } from "lucide-react";
 
-interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null;country_id:string|null; }
+interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null; }
 interface SipTrunk { id:string;name:string;ipbx_id:string;remote_ipbx_id:string|null;status:string;latency:number|null;channels:number|null;max_channels:number|null;provider:string|null; }
-interface NodePos { x:number;y:number; }
+interface Pos { x:number;y:number; }
 
-const NS:Record<string,{c:string;g:string;r:string}> = {
-  online:  {c:"#00e5ff",g:"rgba(0,229,255,0.55)", r:"rgba(0,229,255,0.18)"},
-  offline: {c:"#ff3d57",g:"rgba(255,61,87,0.55)",  r:"rgba(255,61,87,0.18)"},
-  _:       {c:"#f59e0b",g:"rgba(245,158,11,0.55)", r:"rgba(245,158,11,0.18)"},
+const C = {
+  online:  "#0ea5e9",
+  offline: "#f43f5e",
+  warn:    "#f59e0b",
+  up:      "#10b981",
+  down:    "#f43f5e",
+  text:    "#0f172a",
+  muted:   "#94a3b8",
+  border:  "#e2e8f0",
+  bg:      "#f8fafc",
+  card:    "#ffffff",
+  teal:    "#0d9488",
 };
-const TS:Record<string,{c:string;d:string}> = {
-  up:   {c:"#00e5ff",d:"none"},
-  down: {c:"#ff3d57",d:"8,5"},
-  _:    {c:"#f59e0b",d:"4,3"},
-};
-const ns = (s:string) => NS[s]||NS._;
-const ts = (s:string) => TS[s]||TS._;
 
-const autoLayout = (n:number,cx:number,cy:number):NodePos[] => {
+const nodeColor = (s:string) => s==="online"?C.online:s==="offline"?C.offline:C.warn;
+const trunkColor = (s:string, lat:number|null) => {
+  if(s==="down") return C.down;
+  if(lat&&lat>100) return C.warn;
+  return C.up;
+};
+
+const autoLayout = (n:number,cx:number,cy:number):Pos[] => {
   if(!n) return [];
   if(n===1) return [{x:cx,y:cy}];
-  const r=Math.min(270,110+n*32);
+  const r = Math.min(230,90+n*30);
   return Array.from({length:n},(_,i)=>({
     x:cx+r*Math.cos(2*Math.PI*i/n-Math.PI/2),
     y:cy+r*Math.sin(2*Math.PI*i/n-Math.PI/2),
@@ -32,28 +40,28 @@ const autoLayout = (n:number,cx:number,cy:number):NodePos[] => {
 
 const NetworkMap = () => {
   const {applyFilter,allowedIpbxIds,isAdmin,ready} = useAllowedIpbx();
-  const [ipbxList,setIpbxList]=useState<IPBX[]>([]);
-  const [trunks,setTrunks]=useState<SipTrunk[]>([]);
-  const [pos,setPos]=useState<Record<string,NodePos>>({});
-  const [loading,setLoading]=useState(true);
-  const [zoom,setZoom]=useState(1);
-  const [pan,setPan]=useState({x:0,y:0});
-  const [drag,setDrag]=useState<string|null>(null);
-  const [dragOff,setDragOff]=useState({x:0,y:0});
-  const [panning,setPanning]=useState(false);
-  const [panStart,setPanStart]=useState({x:0,y:0});
-  const [hN,setHN]=useState<string|null>(null);
-  const [hT,setHT]=useState<string|null>(null);
-  const [tick,setTick]=useState(0);
-  const [full,setFull]=useState(false);
-  const svgRef=useRef<SVGSVGElement>(null);
-  const W=1100,H=600;
+  const [ipbxList,setIpbxList] = useState<IPBX[]>([]);
+  const [trunks,setTrunks]     = useState<SipTrunk[]>([]);
+  const [pos,setPos]           = useState<Record<string,Pos>>({});
+  const [loading,setLoading]   = useState(true);
+  const [zoom,setZoom]         = useState(1);
+  const [pan,setPan]           = useState({x:0,y:0});
+  const [drag,setDrag]         = useState<string|null>(null);
+  const [dragOff,setDragOff]   = useState({x:0,y:0});
+  const [panning,setPanning]   = useState(false);
+  const [panStart,setPanStart] = useState({x:0,y:0});
+  const [hN,setHN]             = useState<string|null>(null);
+  const [hT,setHT]             = useState<string|null>(null);
+  const [tick,setTick]         = useState(0);
+  const [full,setFull]         = useState(false);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const W=1100,H=580;
 
-  useEffect(()=>{const id=setInterval(()=>setTick(t=>(t+1)%2000),25);return()=>clearInterval(id);},[]);
+  useEffect(()=>{const id=setInterval(()=>setTick(t=>(t+1)%1000),30);return()=>clearInterval(id);},[]);
 
   const fetchData=useCallback(async()=>{
     setLoading(true);
-    let q:any=supabase.from("ipbx").select("id,name,ip_address,status,ping_latency,country_id");
+    let q:any=supabase.from("ipbx").select("id,name,ip_address,status,ping_latency");
     if(!isAdmin&&allowedIpbxIds?.length) q=q.in("id",allowedIpbxIds);
     else if(!isAdmin&&allowedIpbxIds!==null) q=q.in("id",["00000000-0000-0000-0000-000000000000"]);
     const [r1,r2]=await Promise.all([q,
@@ -62,8 +70,10 @@ const NetworkMap = () => {
     setIpbxList(nodes); setTrunks(r2.data||[]);
     setPos(prev=>{
       const next={...prev};
-      const fresh=nodes.filter(n=>!next[n.id]);
-      if(fresh.length){const p=autoLayout(nodes.length,W/2,H/2-20);nodes.forEach((n,i)=>{if(!next[n.id])next[n.id]=p[i];});}
+      if(nodes.some(n=>!next[n.id])){
+        const p=autoLayout(nodes.length,W/2,H/2);
+        nodes.forEach((n,i)=>{if(!next[n.id])next[n.id]=p[i];});
+      }
       return next;
     });
     setLoading(false);
@@ -73,12 +83,11 @@ const NetworkMap = () => {
   useEffect(()=>{if(!ready)return;const id=setInterval(fetchData,30000);return()=>clearInterval(id);},[ready,fetchData]);
 
   const resetLayout=()=>{
-    const p=autoLayout(ipbxList.length,W/2,H/2-20);
-    const next:Record<string,NodePos>={};
+    const p=autoLayout(ipbxList.length,W/2,H/2);
+    const next:Record<string,Pos>={};
     ipbxList.forEach((n,i)=>{next[n.id]=p[i];});
     setPos(next);setZoom(1);setPan({x:0,y:0});
   };
-
   const getSVGPt=(e:React.MouseEvent)=>{
     const svg=svgRef.current;if(!svg)return{x:0,y:0};
     const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;
@@ -110,9 +119,10 @@ const NetworkMap = () => {
   const activeCh=trunks.reduce((a,t)=>a+(t.channels||0),0);
   const avgLat=trunks.filter(t=>t.latency).length?Math.round(trunks.reduce((a,t)=>a+(t.latency||0),0)/trunks.filter(t=>t.latency).length):null;
 
-  const TT=({x,y,children}:{x:number;y:number;children:React.ReactNode})=>(
-    <foreignObject x={x} y={y} width={180} height={120} style={{overflow:"visible"}}>
-      <div style={{background:"rgba(3,10,28,0.97)",border:"1px solid rgba(0,229,255,0.25)",borderRadius:7,padding:"7px 11px",fontSize:10,color:"#e2e8f0",whiteSpace:"nowrap",width:"fit-content"}}>
+  // Tooltip component
+  const Tip=({x,y,children}:{x:number;y:number;children:React.ReactNode})=>(
+    <foreignObject x={x} y={y} width={190} height={130} style={{overflow:"visible"}}>
+      <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:"10px 14px",fontSize:12,color:"#0f172a",boxShadow:"0 8px 24px rgba(15,23,42,0.12)",whiteSpace:"nowrap",width:"fit-content",fontFamily:"Raleway,sans-serif"}}>
         {children}
       </div>
     </foreignObject>
@@ -122,199 +132,241 @@ const NetworkMap = () => {
     const src=pos[t.ipbx_id];
     const dst=t.remote_ipbx_id?pos[t.remote_ipbx_id]:null;
     if(!src)return null;
-    const style=ts(t.status);
+    const tc=trunkColor(t.status,t.latency);
     const isH=hT===t.id;
-    const latC=t.latency&&t.latency>100?"#f59e0b":style.c;
+    const isDash=t.status==="down";
 
     if(!dst){
-      const ang=(Object.keys(pos).indexOf(t.ipbx_id)*55)*(Math.PI/180);
-      const ex=src.x+Math.cos(ang)*65,ey=src.y+Math.sin(ang)*65;
+      const ang=(Object.keys(pos).indexOf(t.ipbx_id)*60)*(Math.PI/180);
+      const ex=src.x+Math.cos(ang)*72,ey=src.y+Math.sin(ang)*72;
       return(
         <g key={t.id} onMouseEnter={()=>setHT(t.id)} onMouseLeave={()=>setHT(null)}>
-          <line x1={src.x} y1={src.y} x2={ex} y2={ey} stroke={style.c} strokeWidth={isH?2.5:1.5} strokeDasharray={style.d} strokeOpacity={0.65}/>
-          <circle cx={ex} cy={ey} r={4} fill={style.c} opacity={0.5}/>
-          {t.latency&&<text x={(src.x+ex)/2} y={(src.y+ey)/2-5} fill={style.c} fontSize={8} textAnchor="middle" fontFamily="JetBrains Mono">{t.latency}ms</text>}
-          {isH&&<TT x={ex+8} y={ey-10}><div style={{fontWeight:700,color:style.c,marginBottom:3}}>{t.name}</div><div style={{color:"#64748b"}}>Provider: {t.provider||"—"}</div><div style={{color:"#64748b"}}>Canaux: {t.channels??0}/{t.max_channels??30}</div></TT>}
+          <line x1={src.x} y1={src.y} x2={ex} y2={ey} stroke={tc} strokeWidth={isH?2.5:1.5} strokeDasharray={isDash?"7,4":"none"} strokeOpacity={0.7}/>
+          <circle cx={ex} cy={ey} r={4} fill={tc} opacity={0.5}/>
+          {t.latency&&<text x={(src.x+ex)/2} y={(src.y+ey)/2-6} fill={tc} fontSize={9} textAnchor="middle" fontFamily="Raleway,sans-serif" fontWeight="600">{t.latency}ms</text>}
+          {isH&&<Tip x={ex+8} y={ey-10}>
+            <div style={{fontWeight:700,color:tc,marginBottom:4}}>{t.name}</div>
+            <div style={{color:"#64748b",fontSize:11}}>Provider: {t.provider||"—"}</div>
+            <div style={{color:"#64748b",fontSize:11}}>Canaux: {t.channels??0}/{t.max_channels??30}</div>
+          </Tip>}
         </g>
       );
     }
 
-    const mx=(src.x+dst.x)/2,my=(src.y+dst.y)/2-55;
+    const mx=(src.x+dst.x)/2,my=(src.y+dst.y)/2-50;
     const path=`M ${src.x} ${src.y} Q ${mx} ${my} ${dst.x} ${dst.y}`;
-    const prog=((tick*0.0028+(t.ipbx_id.charCodeAt(0)*0.07))%1);
+    const prog=((tick*0.003+(t.ipbx_id.charCodeAt(0)*0.07))%1);
     const px=(1-prog)*(1-prog)*src.x+2*(1-prog)*prog*mx+prog*prog*dst.x;
     const py=(1-prog)*(1-prog)*src.y+2*(1-prog)*prog*my+prog*prog*dst.y;
 
     return(
       <g key={t.id} onMouseEnter={()=>setHT(t.id)} onMouseLeave={()=>setHT(null)}>
-        <path d={path} fill="none" stroke={style.c} strokeWidth={10} strokeOpacity={0.04}/>
-        <path d={path} fill="none" stroke={style.c} strokeWidth={5} strokeOpacity={0.08}/>
-        <path d={path} fill="none" stroke={latC} strokeWidth={isH?2.5:1.5} strokeDasharray={style.d} strokeOpacity={0.8}/>
+        {/* Shadow line */}
+        <path d={path} fill="none" stroke={tc} strokeWidth={6} strokeOpacity={0.08}/>
+        {/* Main line */}
+        <path d={path} fill="none" stroke={tc} strokeWidth={isH?2.5:1.5} strokeDasharray={isDash?"8,5":"none"} strokeOpacity={0.85}/>
+        {/* Packet */}
         {t.status==="up"&&<>
-          <circle cx={px} cy={py} r={3.5} fill={style.c} opacity={0.95}/>
-          <circle cx={px} cy={py} r={7} fill={style.c} opacity={0.15}/>
+          <circle cx={px} cy={py} r={4} fill={tc} opacity={0.9}/>
+          <circle cx={px} cy={py} r={7} fill={tc} opacity={0.2}/>
         </>}
-        <rect x={mx-20} y={my-9} width={40} height={14} rx={4} fill="rgba(3,10,28,0.85)" stroke={latC} strokeWidth={0.5} strokeOpacity={0.5}/>
-        <text x={mx} y={my+1} fill={latC} fontSize={8} textAnchor="middle" fontFamily="JetBrains Mono">{t.latency?`${t.latency}ms`:t.name.slice(0,7)}</text>
-        {isH&&<TT x={mx+10} y={my-15}><div style={{fontWeight:700,color:latC,marginBottom:4}}>{t.name}</div><div style={{color:"#64748b"}}>Statut: <span style={{color:style.c}}>{t.status}</span></div><div style={{color:"#64748b"}}>Latence: {t.latency?`${t.latency}ms`:"—"}</div><div style={{color:"#64748b"}}>Canaux: {t.channels??0}/{t.max_channels??30}</div>{t.provider&&<div style={{color:"#64748b"}}>Provider: {t.provider}</div>}</TT>}
+        {/* Latency badge */}
+        <rect x={mx-22} y={my-10} width={44} height={16} rx={8} fill="#fff" stroke={tc} strokeWidth={1}/>
+        <text x={mx} y={my+2} fill={tc} fontSize={9} textAnchor="middle" fontFamily="Raleway,sans-serif" fontWeight="700">
+          {t.latency?`${t.latency}ms`:t.name.slice(0,6)}
+        </text>
+        {isH&&<Tip x={mx+12} y={my-20}>
+          <div style={{fontWeight:700,color:tc,marginBottom:4,fontSize:13}}>{t.name}</div>
+          <div style={{color:"#64748b",fontSize:11}}>Statut: <span style={{color:tc,fontWeight:600}}>{t.status.toUpperCase()}</span></div>
+          <div style={{color:"#64748b",fontSize:11}}>Latence: {t.latency?`${t.latency}ms`:"—"}</div>
+          <div style={{color:"#64748b",fontSize:11}}>Canaux: {t.channels??0}/{t.max_channels??30}</div>
+          {t.provider&&<div style={{color:"#64748b",fontSize:11}}>Provider: {t.provider}</div>}
+        </Tip>}
       </g>
     );
   });
 
   const renderNodes=()=>ipbxList.map(ipbx=>{
     const p=pos[ipbx.id];if(!p)return null;
-    const n=ns(ipbx.status);
+    const nc=nodeColor(ipbx.status);
     const isH=hN===ipbx.id,isDrag=drag===ipbx.id;
     const nodeTrunks=trunks.filter(t=>t.ipbx_id===ipbx.id);
     const ch=nodeTrunks.reduce((a,t)=>a+(t.channels||0),0);
-    const bars=Math.min(ch,5);
+
     return(
       <g key={ipbx.id} transform={`translate(${p.x},${p.y})`}
         onMouseDown={e=>onNDown(e,ipbx.id)}
         onMouseEnter={()=>setHN(ipbx.id)} onMouseLeave={()=>setHN(null)}
         style={{cursor:isDrag?"grabbing":"grab"}}>
+
+        {/* Pulse ring for online */}
         {ipbx.status==="online"&&(
-          <circle r={45} fill="none" stroke={n.c} strokeWidth={0.5} strokeOpacity={0.1}>
-            <animate attributeName="r" values="32;55;32" dur="3.5s" repeatCount="indefinite"/>
-            <animate attributeName="stroke-opacity" values="0.25;0;0.25" dur="3.5s" repeatCount="indefinite"/>
+          <circle r={38} fill="none" stroke={nc} strokeWidth={1} strokeOpacity={0.15}>
+            <animate attributeName="r" values="28;46;28" dur="3s" repeatCount="indefinite"/>
+            <animate attributeName="stroke-opacity" values="0.2;0;0.2" dur="3s" repeatCount="indefinite"/>
           </circle>
         )}
-        <circle r={26} fill={n.r}/>
-        <circle r={24} fill="none" stroke={n.c} strokeWidth={0.5} strokeOpacity={0.35}/>
-        <circle r={20} fill="none" stroke={n.c} strokeWidth={1} strokeOpacity={0.6}/>
-        <circle r={16} fill="#030a1c" stroke={n.c} strokeWidth={isH?2:1.5}
-          style={{filter:`drop-shadow(0 0 10px ${n.g})`}}/>
-        <polygon points="0,-8 7,-4 7,4 0,8 -7,4 -7,-4"
-          fill="none" stroke={n.c} strokeWidth={1} strokeOpacity={0.8}/>
-        <circle r={2.5} fill={n.c} opacity={0.9}/>
-        {ch>0&&Array.from({length:bars}).map((_,i)=>(
-          <rect key={i} x={-9+i*4.5} y={-30+(3-i)*-1.5} width={3.5} height={7+i*2.5} rx={1} fill={n.c} opacity={0.35+i*0.13}/>
-        ))}
-        <circle cx={14} cy={-14} r={3.5} fill={n.c}>
-          {ipbx.status==="online"&&<animate attributeName="opacity" values="1;0.25;1" dur="1.6s" repeatCount="indefinite"/>}
+
+        {/* Card shadow */}
+        <circle r={26} fill="rgba(15,23,42,0.06)"/>
+
+        {/* Main circle */}
+        <circle r={24} fill="#fff" stroke={nc} strokeWidth={isDrag||isH?2.5:1.5}/>
+
+        {/* Inner fill */}
+        <circle r={20} fill={nc} opacity={0.08}/>
+
+        {/* Icon — server shape */}
+        <rect x={-9} y={-11} width={18} height={22} rx={3} fill="none" stroke={nc} strokeWidth={1.5}/>
+        <circle cx={0} cy={-3} r={2} fill={nc}/>
+        <circle cx={0} cy={4} r={2} fill={nc}/>
+
+        {/* Status dot */}
+        <circle cx={16} cy={-16} r={4} fill={nc} stroke="#fff" strokeWidth={1.5}>
+          {ipbx.status==="online"&&<animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>}
         </circle>
-        <text y={30} textAnchor="middle" fontSize={10.5} fill="#dde4f0" fontFamily="JetBrains Mono" fontWeight="600">{ipbx.name}</text>
-        <text y={41} textAnchor="middle" fontSize={8} fill="#3d5068" fontFamily="JetBrains Mono">{ipbx.ip_address||"—"}</text>
-        {ipbx.ping_latency&&<text y={51} textAnchor="middle" fontSize={7.5} fill={n.c} fontFamily="JetBrains Mono" opacity={0.75}>{ipbx.ping_latency}ms</text>}
+
+        {/* Name */}
+        <text y={34} textAnchor="middle" fontSize={11} fill={C.text} fontFamily="Raleway,sans-serif" fontWeight="700">{ipbx.name}</text>
+        <text y={46} textAnchor="middle" fontSize={8.5} fill={C.muted} fontFamily="Raleway,sans-serif">{ipbx.ip_address||"—"}</text>
+        {ipbx.ping_latency&&(
+          <text y={56} textAnchor="middle" fontSize={8} fill={nc} fontFamily="Raleway,sans-serif" fontWeight="600">{ipbx.ping_latency}ms</text>
+        )}
+
+        {/* Hover card */}
         {isH&&!isDrag&&(
-          <TT x={24} y={-25}>
-            <div style={{fontWeight:700,fontSize:11,color:n.c,marginBottom:5}}>{ipbx.name}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"3px 10px",color:"#64748b"}}>
-              <span>Statut</span><span style={{color:n.c}}>{ipbx.status}</span>
-              <span>IP</span><span style={{color:"#94a3b8"}}>{ipbx.ip_address||"—"}</span>
-              <span>Ping</span><span style={{color:"#94a3b8"}}>{ipbx.ping_latency?`${ipbx.ping_latency}ms`:"—"}</span>
-              <span>Trunks</span><span style={{color:"#94a3b8"}}>{nodeTrunks.length}</span>
-              <span>Canaux</span><span style={{color:"#94a3b8"}}>{ch}</span>
+          <Tip x={28} y={-28}>
+            <div style={{fontWeight:700,color:nc,fontSize:13,marginBottom:5}}>{ipbx.name}</div>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"3px 12px",fontSize:11}}>
+              <span style={{color:"#94a3b8"}}>Statut</span><span style={{fontWeight:600,color:nc}}>{ipbx.status}</span>
+              <span style={{color:"#94a3b8"}}>IP</span><span style={{color:"#334155"}}>{ipbx.ip_address||"—"}</span>
+              <span style={{color:"#94a3b8"}}>Ping</span><span style={{color:"#334155"}}>{ipbx.ping_latency?`${ipbx.ping_latency}ms`:"—"}</span>
+              <span style={{color:"#94a3b8"}}>Trunks</span><span style={{color:"#334155"}}>{nodeTrunks.length}</span>
+              <span style={{color:"#94a3b8"}}>Canaux</span><span style={{color:"#334155"}}>{ch}</span>
             </div>
-          </TT>
+          </Tip>
         )}
       </g>
     );
   });
 
-  const cs:React.CSSProperties=full?{position:"fixed",inset:0,zIndex:9999,background:"#020a1b",display:"flex",flexDirection:"column",padding:16}:{};
   const stats=[
-    {l:"IPBX Online",v:online,c:"#00e5ff"},
-    {l:"IPBX Offline",v:offline,c:"#ff3d57"},
-    {l:"Trunks UP",v:`${tUp}/${tUp+tDown}`,c:"#00e5ff"},
-    {l:"Latence moy.",v:avgLat?`${avgLat}ms`:"—",c:avgLat&&avgLat>100?"#f59e0b":"#00e5ff"},
-    {l:"Canaux actifs",v:activeCh,c:"#f59e0b"},
+    {l:"IPBX Online",  v:online,              c:C.online,  sub:`${ipbxList.length} total`},
+    {l:"IPBX Offline", v:offline,             c:C.offline, sub:"à vérifier"},
+    {l:"Trunks UP",    v:`${tUp}/${tUp+tDown}`,c:C.up,     sub:"en service"},
+    {l:"Latence moy.", v:avgLat?`${avgLat}ms`:"—", c:avgLat&&avgLat>100?C.warn:C.teal, sub:"moyenne réseau"},
+    {l:"Canaux actifs",v:activeCh,            c:C.warn,    sub:"en cours"},
   ];
 
-  return(
-    <div style={cs}>
-      <div className={full?"":"space-y-3"} style={full?{display:"flex",flexDirection:"column",gap:12,height:"100%"}:{}}>
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              <Activity size={18} className="text-primary"/> Network Map
-            </h1>
-            <p className="text-xs text-muted-foreground font-mono">Topologie VoIP temps réel</p>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            {[{l:`${online} online`,bg:"rgba(0,229,255,0.08)",c:"#00e5ff",show:true},
-              {l:`${offline} offline`,bg:"rgba(255,61,87,0.08)",c:"#ff3d57",show:offline>0},
-              {l:`${tUp}/${tUp+tDown} trunks UP`,bg:"rgba(0,229,255,0.06)",c:"#00e5ff",show:true},
-            ].filter(p=>p.show).map(p=>(
-              <div key={p.l} style={{background:p.bg,border:`1px solid ${p.c}33`,color:p.c,borderRadius:20,padding:"3px 11px",fontSize:11,fontFamily:"JetBrains Mono",fontWeight:600}}>
-                {p.l}
-              </div>
-            ))}
-            <div style={{display:"flex",gap:5}}>
-              {[{I:ZoomIn,a:()=>setZoom(z=>Math.min(4,z+0.25))},
-                {I:ZoomOut,a:()=>setZoom(z=>Math.max(0.2,z-0.25))},
-                {I:RotateCcw,a:resetLayout},
-                {I:RefreshCw,a:fetchData},
-                {I:Maximize2,a:()=>setFull(f=>!f)},
-              ].map(({I,a},i)=>(
-                <button key={i} onClick={a} style={{width:30,height:30,borderRadius:6,border:"1px solid rgba(0,229,255,0.15)",background:"rgba(0,229,255,0.04)",color:"#64748b",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                  <I size={13}/>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+  const containerStyle: React.CSSProperties = full?{
+    position:"fixed",inset:0,zIndex:9999,background:C.bg,display:"flex",flexDirection:"column",padding:20,
+  }:{};
 
-        {/* Canvas */}
-        <div style={{position:"relative",borderRadius:12,overflow:"hidden",border:"1px solid rgba(0,229,255,0.1)",background:"linear-gradient(150deg,#020a1b,#030d1f,#040f23)",flex:full?1:undefined}}>
-          <div style={{position:"absolute",inset:0,backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,229,255,0.012) 3px,rgba(0,229,255,0.012) 4px)",pointerEvents:"none",zIndex:1}}/>
-          <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0.2}}>
-            <defs>
-              <pattern id="gsm" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0L0 0 0 28" fill="none" stroke="#0b1e38" strokeWidth="0.5"/></pattern>
-              <pattern id="glg" width="112" height="112" patternUnits="userSpaceOnUse"><path d="M112 0L0 0 0 112" fill="none" stroke="#0d2244" strokeWidth="0.8"/></pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#gsm)"/>
-            <rect width="100%" height="100%" fill="url(#glg)"/>
-          </svg>
-          {loading&&!ipbxList.length?(
-            <div style={{height:480,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",zIndex:2}}>
-              <div style={{textAlign:"center"}}>
-                <div style={{width:38,height:38,border:"2px solid rgba(0,229,255,0.15)",borderTop:"2px solid #00e5ff",borderRadius:"50%",animation:"nspin 1s linear infinite",margin:"0 auto 12px"}}/>
-                <p style={{color:"#3d5068",fontSize:12,fontFamily:"JetBrains Mono"}}>Chargement topologie...</p>
-              </div>
-            </div>
-          ):ipbxList.length===0?(
-            <div style={{height:480,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",zIndex:2}}>
-              <p style={{color:"#3d5068",fontSize:13}}>Aucun IPBX configuré</p>
-            </div>
-          ):(
-            <svg ref={svgRef} width="100%" height={full?"calc(100vh - 200px)":480}
-              viewBox={`0 0 ${W} ${H}`}
-              style={{cursor:panning?"grabbing":"default",position:"relative",zIndex:2}}
-              onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-              onMouseDown={onSDown} onWheel={onWheel}>
-              <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-                {renderTrunks()}{renderNodes()}
-              </g>
-            </svg>
-          )}
-          <div style={{position:"absolute",bottom:10,right:12,zIndex:3,background:"rgba(3,10,28,0.85)",border:"1px solid rgba(0,229,255,0.12)",borderRadius:5,padding:"3px 8px",fontSize:10,color:"#3d5068",fontFamily:"JetBrains Mono"}}>
-            {Math.round(zoom*100)}%
-          </div>
-        </div>
+  return (
+    <div style={containerStyle}>
+    <div className={full?"":"space-y-4"} style={full?{display:"flex",flexDirection:"column",gap:16,height:"100%"}:{}}>
 
-        {/* Stats bar */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
-          {stats.map(s=>(
-            <div key={s.l} style={{background:"rgba(3,10,28,0.85)",border:"1px solid rgba(0,229,255,0.08)",borderRadius:10,padding:"10px 14px"}}>
-              <p style={{fontSize:9,color:"#3d5068",fontFamily:"JetBrains Mono",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>{s.l}</p>
-              <p style={{fontSize:21,fontWeight:700,color:s.c,fontFamily:"JetBrains Mono",lineHeight:1}}>{s.v}</p>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:700,color:C.text,fontFamily:"Raleway,sans-serif",display:"flex",alignItems:"center",gap:8,margin:0}}>
+            <Activity size={18} color={C.teal}/> Network Map
+          </h1>
+          <p style={{fontSize:12,color:C.muted,fontFamily:"Raleway,sans-serif",margin:0}}>Topologie VoIP en temps réel</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          {/* Status pills */}
+          {[
+            {l:`${online} online`,  bg:"#f0fdf4",c:"#16a34a",border:"#bbf7d0",show:true},
+            {l:`${offline} offline`,bg:"#fff1f2",c:"#e11d48",border:"#fecdd3",show:offline>0},
+            {l:`${tUp}/${tUp+tDown} trunks`,bg:"#eff6ff",c:"#2563eb",border:"#bfdbfe",show:true},
+          ].filter(x=>x.show).map(x=>(
+            <div key={x.l} style={{background:x.bg,border:`1px solid ${x.border}`,color:x.c,borderRadius:20,padding:"4px 12px",fontSize:12,fontFamily:"Raleway,sans-serif",fontWeight:600}}>
+              {x.l}
             </div>
           ))}
-        </div>
-
-        {/* Legend */}
-        <div style={{display:"flex",gap:18,fontSize:10,color:"#3d5068",fontFamily:"JetBrains Mono",flexWrap:"wrap"}}>
-          {[{c:"#00e5ff",l:"Online / UP"},{c:"#ff3d57",l:"Offline / DOWN"},{c:"#f59e0b",l:"Latence > 100ms"}].map(x=>(
-            <div key={x.l} style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{width:18,height:2,background:x.c,borderRadius:1}}/>{x.l}
-            </div>
+          {/* Controls */}
+          {[
+            {I:ZoomIn,    a:()=>setZoom(z=>Math.min(4,z+0.25)),tip:"Zoom +"},
+            {I:ZoomOut,   a:()=>setZoom(z=>Math.max(0.2,z-0.25)),tip:"Zoom -"},
+            {I:RotateCcw, a:resetLayout,tip:"Reset"},
+            {I:RefreshCw, a:fetchData,tip:"Refresh"},
+            {I:Maximize2, a:()=>setFull(f=>!f),tip:"Plein écran"},
+          ].map(({I,a,tip},i)=>(
+            <button key={i} onClick={a} title={tip}
+              style={{width:34,height:34,borderRadius:8,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 1px 3px rgba(15,23,42,0.06)"}}>
+              <I size={14}/>
+            </button>
           ))}
-          <span style={{marginLeft:"auto",opacity:0.5}}>Glisser nœuds · Molette zoomer · Drag fond = panoramique</span>
         </div>
       </div>
-      <style>{`@keyframes nspin{to{transform:rotate(360deg)}}`}</style>
+
+      {/* Map */}
+      <div style={{borderRadius:16,overflow:"hidden",border:"1px solid #e2e8f0",background:"#f8fafc",boxShadow:"0 1px 8px rgba(15,23,42,0.06)",position:"relative",flex:full?1:undefined}}>
+        {/* Dot grid */}
+        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:1}}>
+          <defs>
+            <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+              <circle cx="1" cy="1" r="1" fill="#cbd5e1" opacity="0.6"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#dots)"/>
+        </svg>
+
+        {loading&&!ipbxList.length?(
+          <div style={{height:460,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{width:36,height:36,border:"2px solid #e2e8f0",borderTop:`2px solid ${C.teal}`,borderRadius:"50%",animation:"nmspin 1s linear infinite",margin:"0 auto 12px"}}/>
+              <p style={{color:C.muted,fontSize:13,fontFamily:"Raleway,sans-serif"}}>Chargement de la topologie...</p>
+            </div>
+          </div>
+        ):ipbxList.length===0?(
+          <div style={{height:460,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+            <div style={{textAlign:"center"}}>
+              <Server size={32} color="#cbd5e1" style={{margin:"0 auto 12px"}}/>
+              <p style={{color:C.muted,fontSize:13,fontFamily:"Raleway,sans-serif"}}>Aucun IPBX configuré</p>
+            </div>
+          </div>
+        ):(
+          <svg ref={svgRef} width="100%" height={full?"calc(100vh - 250px)":460}
+            viewBox={`0 0 ${W} ${H}`}
+            style={{cursor:panning?"grabbing":"default",position:"relative",zIndex:1}}
+            onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+            onMouseDown={onSDown} onWheel={onWheel}>
+            <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+              {renderTrunks()}{renderNodes()}
+            </g>
+          </svg>
+        )}
+
+        {/* Zoom badge */}
+        <div style={{position:"absolute",bottom:10,right:12,zIndex:2,background:"rgba(255,255,255,0.9)",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 9px",fontSize:11,color:C.muted,fontFamily:"Raleway,sans-serif",backdropFilter:"blur(4px)"}}>
+          {Math.round(zoom*100)}%
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
+        {stats.map(s=>(
+          <div key={s.l} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(15,23,42,0.05)"}}>
+            <p style={{fontSize:10,color:C.muted,fontFamily:"Raleway,sans-serif",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 4px"}}>{s.l}</p>
+            <p style={{fontSize:24,fontWeight:800,color:s.c,fontFamily:"Raleway,sans-serif",margin:"0 0 2px",lineHeight:1}}>{s.v}</p>
+            <p style={{fontSize:10,color:"#cbd5e1",fontFamily:"Raleway,sans-serif",margin:0}}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",alignItems:"center",gap:20,fontSize:11,color:C.muted,fontFamily:"Raleway,sans-serif",flexWrap:"wrap"}}>
+        {[{c:C.online,l:"En ligne"},{c:C.offline,l:"Hors ligne"},{c:C.up,l:"Trunk UP"},{c:C.warn,l:"Latence élevée"}].map(x=>(
+          <div key={x.l} style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:16,height:3,background:x.c,borderRadius:2}}/>{x.l}
+          </div>
+        ))}
+        <span style={{marginLeft:"auto",fontSize:10,color:"#cbd5e1"}}>Glisser nœuds · Molette zoomer · Drag panoramique</span>
+      </div>
+    </div>
+    <style>{`@keyframes nmspin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 };
