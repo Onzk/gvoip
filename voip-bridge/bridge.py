@@ -546,6 +546,28 @@ def cleanup_old_alerts():
     except Exception as e:
         logging.error(f"Erreur nettoyage alertes: {e}")
 
+def cleanup_quality_metrics():
+    """Supprime les métriques qualité de plus de 24h."""
+    try:
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        res = supabase.table("quality_metrics").delete()            .lt("recorded_at", cutoff)            .execute()
+        if res.data:
+            logging.info(f"Nettoyage quality_metrics: {len(res.data)} lignes supprimees")
+    except Exception as e:
+        logging.error(f"Erreur nettoyage quality_metrics: {e}")
+
+def cleanup_sip_flows():
+    """Supprime les traces SIP de plus de 24h."""
+    try:
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        res = supabase.table("sip_flows").delete()            .lt("created_at", cutoff)            .execute()
+        if res.data:
+            logging.info(f"Nettoyage sip_flows: {len(res.data)} lignes supprimees")
+    except Exception as e:
+        logging.error(f"Erreur nettoyage sip_flows: {e}")
+
 def main():
     logging.info("Démarrage du Bridge FreePBX -> Supabase")
     ami_threads = {}
@@ -576,9 +598,11 @@ def main():
         except Exception as e:
             logging.error(f"Erreur boucle principale: {e}")
 
-        # Nettoyage alertes acquittées > 24h (toutes les heures)
+        # Nettoyage toutes les heures
         if int(time.time()) % 3600 < 60:
             cleanup_old_alerts()
+            cleanup_quality_metrics()
+            cleanup_sip_flows()
 
         time.sleep(60)
 
