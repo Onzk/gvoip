@@ -16,6 +16,7 @@ import {
   Settings,
   LogOut,
   Map,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,69 +25,175 @@ const AppSidebar = () => {
   const { isAdmin, user, signOut, canView } = useAuth();
 
   const navItems = [
-    { to: "/", icon: LayoutDashboard, label: "Dashboard", show: isAdmin || canView("dashboard") },
-    { to: "/network-map", icon: Map, label: "Network Map", show: isAdmin || canView("network_map") },
-    { to: "/countries", icon: Globe, label: "Pays", show: canView("dashboard_country") },
-    { to: "/ipbx", icon: Server, label: "IPBX", show: canView("settings") },
-    { to: "/sip-trunks", icon: Network, label: "SIP Trunks", show: canView("sip_trunks") },
-    { to: "/extensions", icon: Phone, label: "Extensions", show: canView("extensions") },
-    { to: "/calls", icon: PhoneCall, label: "Appels", show: canView("cdr") },
-    { to: "/quality", icon: Activity, label: "Qualite VoIP", show: canView("quality") },
-    { to: "/alerts", icon: Bell, label: "Alertes", show: canView("alerts") },
-    { to: "/users", icon: Users, label: "Utilisateurs", show: isAdmin },
+    { to: "/",            icon: LayoutDashboard, label: "Dashboard",    show: isAdmin || canView("dashboard"),        section: "menu" },
+    { to: "/network-map", icon: Map,             label: "Network Map",  show: isAdmin || canView("network_map"),      section: "menu" },
+    { to: "/countries",   icon: Globe,           label: "Pays",         show: canView("dashboard_country"),           section: "menu" },
+    { to: "/ipbx",        icon: Server,          label: "IPBX",         show: canView("settings"),                    section: "menu" },
+    { to: "/sip-trunks",  icon: Network,         label: "SIP Trunks",   show: canView("sip_trunks"),                  section: "menu" },
+    { to: "/extensions",  icon: Phone,           label: "Extensions",   show: canView("extensions"),                  section: "menu" },
+    { to: "/calls",       icon: PhoneCall,       label: "Appels",       show: canView("cdr"),                         section: "menu" },
+    { to: "/quality",     icon: Activity,        label: "Qualité VoIP", show: canView("quality"),                     section: "general" },
+    { to: "/alerts",      icon: Bell,            label: "Alertes",      show: canView("alerts"),                      section: "general" },
+    { to: "/users",       icon: Users,           label: "Utilisateurs", show: isAdmin,                                section: "general" },
   ];
 
-  return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-60 bg-sidebar border-r border-sidebar-border flex flex-col">
-      {/* Logo */}
-      <div className="px-5 py-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className=" rounded-xl bg-transparent">
-<img src="/GVOIP.png" alt="" className="w-12 h-12 mx-auto"/>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-wide">G<span className="text-primary">VoIP</span></h1>
+  const menuItems    = navItems.filter(i => i.show && i.section === "menu");
+  const generalItems = navItems.filter(i => i.show && i.section === "general");
 
+  return (
+    <aside
+      className="fixed left-0 top-0 z-40 h-screen w-60 flex flex-col bg-card border-r border-border"
+      style={{ fontFamily: "'Raleway', sans-serif" }}
+    >
+      {/* ── Logo ─────────────────────────────────────────────── */}
+      <div className="px-5 py-5 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#1A4D2E] flex items-center justify-center shrink-0">
+            <img src="/GVOIP.png" alt="GVoIP" className="w-6 h-6 object-contain" />
           </div>
+          <h1
+            className="text-lg font-black text-foreground tracking-wide"
+            style={{ fontFamily: "'Raleway', sans-serif" }}
+          >
+            G<span style={{ color: "#1A4D2E" }} className="dark:text-emerald-400">VoIP</span>
+          </h1>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-        {navItems.filter((i) => i.show).map((item) => {
-          const isActive = location.pathname === item.to;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-200",
-                isActive
-                  ? "bg-primary/10 text-primary shadow-sm"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <item.icon size={17} strokeWidth={isActive ? 2.2 : 1.8} />
-              {item.label}
-            </NavLink>
-          );
-        })}
+      {/* ── Nav ──────────────────────────────────────────────── */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin space-y-4">
+
+        {/* Section MENU */}
+        {menuItems.length > 0 && (
+          <div>
+            <p className="px-3 mb-2 text-[9px] font-black tracking-[1.5px] uppercase text-muted-foreground">
+              Menu
+            </p>
+            <div className="space-y-0.5">
+              {menuItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
+                      isActive
+                        ? "text-[#1A4D2E] dark:text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
+                    )}
+                    style={
+                      isActive
+                        ? { background: "rgba(26,77,46,.10)" }
+                        : undefined
+                    }
+                  >
+                    {/* Active left bar */}
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+                        style={{ background: "#1A4D2E" }}
+                      />
+                    )}
+                    <item.icon
+                      size={16}
+                      strokeWidth={isActive ? 2.4 : 1.8}
+                      className={isActive ? "text-[#1A4D2E] dark:text-emerald-400" : "text-muted-foreground"}
+                    />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Section GENERAL */}
+        {generalItems.length > 0 && (
+          <div>
+            <p className="px-3 mb-2 text-[9px] font-black tracking-[1.5px] uppercase text-muted-foreground">
+              Général
+            </p>
+            <div className="space-y-0.5">
+              {generalItems.map((item) => {
+                const isActive = location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
+                      isActive
+                        ? "text-[#1A4D2E] dark:text-emerald-400"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
+                    )}
+                    style={
+                      isActive
+                        ? { background: "rgba(26,77,46,.10)" }
+                        : undefined
+                    }
+                  >
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
+                        style={{ background: "#1A4D2E" }}
+                      />
+                    )}
+                    <item.icon
+                      size={16}
+                      strokeWidth={isActive ? 2.4 : 1.8}
+                      className={isActive ? "text-[#1A4D2E] dark:text-emerald-400" : "text-muted-foreground"}
+                    />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-sidebar-border space-y-2">
+      {/* ── Encart "App Mobile" style Donezo ─────────────────── */}
+      <div className="mx-3 mb-3 rounded-2xl p-4 bg-[#1A4D2E] overflow-hidden relative">
+        {/* Décorations cercles */}
+        <span className="absolute -right-4 -bottom-4 w-16 h-16 rounded-full bg-white/5 pointer-events-none" />
+        <span className="absolute right-6 -top-6 w-12 h-12 rounded-full bg-white/4 pointer-events-none" />
+
+        <p className="text-[12px] font-black text-white leading-tight mb-1">
+          Téléchargez<br />notre App Mobile
+        </p>
+        <p className="text-[10px] text-white/60 font-medium mb-3">
+          Accès facile en mobilité
+        </p>
+        <button
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black text-white transition-colors"
+          style={{ background: "#4CAF7D" }}
+        >
+          <Download size={11} />
+          Télécharger
+        </button>
+      </div>
+
+      {/* ── Footer ───────────────────────────────────────────── */}
+      <div className="px-4 py-3 border-t border-border space-y-2">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-glow" />
-          <span className="text-[10px] text-muted-foreground">Système opérationnel</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">Système opérationnel</span>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield size={11} className="text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Shield size={11} className="text-muted-foreground shrink-0" />
+            <span className="text-[10px] text-muted-foreground font-medium truncate">
               {user?.email || "—"}
             </span>
           </div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={signOut}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0 hover:bg-red-500/10 hover:text-red-500 transition-colors rounded-lg"
+            onClick={signOut}
+            title="Déconnexion"
+          >
             <LogOut size={12} />
           </Button>
         </div>
