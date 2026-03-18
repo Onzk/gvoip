@@ -86,7 +86,7 @@ const ProtectedRoutes = () => {
         <Route path="/countries" element={<Guard view="dashboard_country" element={<Countries />} />} />
         <Route path="/countries/:id" element={<Guard view="dashboard_country" element={<CountryDashboard />} />} />
         <Route path="/ipbx" element={<Guard view="settings" element={<IPBXManagement />} />} />
-        <Route path="/network-map" element={<Guard view="dashboard" element={<NetworkMap />} />} />
+        <Route path="/network-map" element={<Guard view="network_map" element={<NetworkMap />} />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
