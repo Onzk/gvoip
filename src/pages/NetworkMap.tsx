@@ -195,6 +195,16 @@ const NetworkMap = () => {
   // Track rendered pairs to avoid double lines
   const renderedPairs = new Set<string>();
 
+  // Pre-compute orphan trunks per IPBX (trunks with no remote_ipbx_id)
+  const orphansByIpbx: Record<string, string[]> = {};
+  trunks.forEach(t => {
+    const dst = t.remote_ipbx_id ? pos[t.remote_ipbx_id] : null;
+    if (!dst && pos[t.ipbx_id]) {
+      if (!orphansByIpbx[t.ipbx_id]) orphansByIpbx[t.ipbx_id] = [];
+      orphansByIpbx[t.ipbx_id].push(t.id);
+    }
+  });
+
   const renderTrunks=()=>trunks.map(t=>{
     const src=pos[t.ipbx_id];
     const dst=t.remote_ipbx_id?pos[t.remote_ipbx_id]:null;
@@ -204,7 +214,16 @@ const NetworkMap = () => {
     const isDash=t.status==="down";
 
     if(!dst){
-      const ang=(Object.keys(pos).indexOf(t.ipbx_id)*60)*(Math.PI/180);
+      // Spread orphan trunks evenly in a fan around the node
+      const siblings = orphansByIpbx[t.ipbx_id] || [t.id];
+      const idxInSiblings = siblings.indexOf(t.id);
+      const total = siblings.length;
+      // Fan from -60° to +60° (or full circle if many trunks)
+      const spreadDeg = total > 1 ? Math.min(120, total * 40) : 0;
+      const startAng = -spreadDeg / 2;
+      const stepAng  = total > 1 ? spreadDeg / (total - 1) : 0;
+      const baseDeg  = startAng + idxInSiblings * stepAng;
+      const ang      = (baseDeg) * (Math.PI / 180);
       const ex=src.x+Math.cos(ang)*72,ey=src.y+Math.sin(ang)*72;
       return(
         <g key={t.id} onMouseEnter={()=>setHT(t.id)} onMouseLeave={()=>setHT(null)}>
