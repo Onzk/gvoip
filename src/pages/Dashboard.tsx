@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/noc/StatusBadge";
 import {
   Network, Phone, PhoneCall, Activity, AlertTriangle,
-  TrendingUp, Gauge, Wifi, ArrowUpRight, Plus, Download,
+  TrendingUp, Gauge, Wifi, ArrowUpRight,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -168,7 +168,7 @@ const Dashboard = () => {
           .select("id, type, title, message, created_at, acknowledged"))
           .eq("acknowledged", false)
           .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(3),
         supabase.from("quality_metrics")
           .select("mos, jitter, recorded_at")
           .gte("recorded_at", new Date(Date.now() - 3600000 * 24).toISOString())
@@ -263,27 +263,11 @@ const Dashboard = () => {
     <div className="space-y-5" style={{ fontFamily: "'Raleway', sans-serif" }}>
 
       {/* ── En-tête ──────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-medium">
-            Planifiez, priorisez et gérez votre infrastructure VoIP en temps réel.
-          </p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Link to="/sip-trunks">
-            <button className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl
-              bg-[#1A4D2E] text-white text-xs font-bold
-              hover:bg-[#163d24] transition-colors">
-              <Plus size={13} /> Ajouter Trunk
-            </button>
-          </Link>
-          <button className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl
-            border border-border text-foreground text-xs font-bold
-            hover:bg-muted transition-colors">
-            <Download size={13} /> Importer
-          </button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-black text-foreground tracking-tight">Dashboard</h1>
+        <p className="text-sm text-muted-foreground mt-0.5 font-medium">
+          Planifiez, priorisez et gérez votre infrastructure VoIP en temps réel.
+        </p>
       </div>
 
       {/* ── KPI Cards ────────────────────────────────────────── */}
@@ -325,16 +309,9 @@ const Dashboard = () => {
         {/* Volume d'appels */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card>
-            <CardHeader
-              title="Volume d'appels (24h)"
-              action={
-                <span className="px-3 py-1 rounded-lg bg-amber-400 text-amber-900 text-[10px] font-black">
-                  Actions
-                </span>
-              }
-            />
+            <CardHeader title="Volume d'appels (24h)" />
             {callVolume.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
+              <ResponsiveContainer width="100%" height={130}>
                 <BarChart data={callVolume} barCategoryGap="35%">
                   <CartesianGrid {...chartGrid} />
                   <XAxis dataKey="h" tick={chartTick} axisLine={false} tickLine={false} />
@@ -344,7 +321,7 @@ const Dashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
+              <div className="h-[130px] flex items-center justify-center text-muted-foreground text-sm">
                 Aucun appel dans les 24 dernières heures
               </div>
             )}
