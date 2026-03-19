@@ -50,7 +50,7 @@ const AppSidebar = () => {
             className="text-lg font-black text-foreground tracking-wide"
             style={{ fontFamily: "'Raleway', sans-serif" }}
           >
-            G<span style={{ color: "#1A4D2E" }} className="dark:text-emerald-400">VoIP</span>
+            G<span className="text-primary dark:text-pink-300">VoIP</span>
           </h1>
         </div>
       </div>
@@ -74,12 +74,12 @@ const AppSidebar = () => {
                     className={cn(
                       "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
                       isActive
-                        ? "text-[#1A4D2E] dark:text-emerald-400"
+                        ? "text-primary dark:text-pink-300"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
                     )}
                     style={
                       isActive
-                        ? { background: "rgba(26,77,46,.10)" }
+                        ? { background: "hsl(var(--primary) / 0.12)" }
                         : undefined
                     }
                   >
@@ -87,13 +87,13 @@ const AppSidebar = () => {
                     {isActive && (
                       <span
                         className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
-                        style={{ background: "#1A4D2E" }}
+                        style={{ background: "hsl(var(--primary))" }}
                       />
                     )}
                     <item.icon
                       size={16}
                       strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-[#1A4D2E] dark:text-emerald-400" : "text-muted-foreground"}
+                      className={isActive ? "text-primary dark:text-pink-300" : "text-muted-foreground"}
                     />
                     {item.label}
                   </NavLink>
@@ -119,25 +119,25 @@ const AppSidebar = () => {
                     className={cn(
                       "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
                       isActive
-                        ? "text-[#1A4D2E] dark:text-emerald-400"
+                        ? "text-primary dark:text-pink-300"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
                     )}
                     style={
                       isActive
-                        ? { background: "rgba(26,77,46,.10)" }
+                        ? { background: "hsl(var(--primary) / 0.12)" }
                         : undefined
                     }
                   >
                     {isActive && (
                       <span
                         className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full"
-                        style={{ background: "#1A4D2E" }}
+                        style={{ background: "hsl(var(--primary))" }}
                       />
                     )}
                     <item.icon
                       size={16}
                       strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-[#1A4D2E] dark:text-emerald-400" : "text-muted-foreground"}
+                      className={isActive ? "text-primary dark:text-pink-300" : "text-muted-foreground"}
                     />
                     {item.label}
                   </NavLink>
@@ -151,7 +151,7 @@ const AppSidebar = () => {
       {/* ── Footer ───────────────────────────────────────────── */}
       <div className="px-4 py-3 border-t border-border space-y-2">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="w-2 h-2 rounded-full bg-success animate-pulse shrink-0" />
           <span className="text-[10px] font-semibold text-muted-foreground">Système opérationnel</span>
         </div>
         <div className="flex items-center justify-between gap-2">
