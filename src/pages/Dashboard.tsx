@@ -259,8 +259,12 @@ const Dashboard = () => {
   /* Couleur accent MOS */
   const mosColor = stats.mos >= 4 ? "#1A4D2E" : stats.mos >= 3 ? "#F5A623" : "#E05C5C";
 
+  /* Hauteurs fixes partagées pour aligner les rangées */
+  const ROW2_H = 200; // px — Volume d'appels chart + Donut MOS
+  const ROW3_H = 200; // px — Trunks list, MOS chart, Alertes
+
   return (
-    <div className="space-y-5" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-4" style={{ fontFamily: "'Raleway', sans-serif" }}>
 
       {/* ── En-tête ──────────────────────────────────────────── */}
       <div>
@@ -270,158 +274,123 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* ── KPI Cards ────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard
-          label="SIP Trunks"
-          value={stats.trunks}
+      {/* ── RANGÉE 1 : 4 KPI cards — hauteur uniforme via items-stretch ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-stretch">
+        <KpiCard label="SIP Trunks" value={stats.trunks}
           sub={`${stats.trunksUp} UP · ${stats.trunksDown} DOWN`}
-          accent
-          trend={stats.trunksDown > 0 ? "down" : "up"}
-          to="/sip-trunks"
-        />
-        <KpiCard
-          label="Extensions"
-          value={stats.extensions}
-          sub={`${stats.extsOnline} en ligne`}
-          trend="up"
-          to="/extensions"
-        />
-        <KpiCard
-          label="Appels actifs"
-          value={stats.activeCalls}
-          sub="En cours"
-          trend="up"
-          to="/calls"
-        />
-        <KpiCard
-          label="Alertes"
-          value={stats.alerts}
-          sub="Non acquittées"
-          trend={stats.alerts > 0 ? "down" : "none"}
-          to="/alerts"
-        />
+          accent trend={stats.trunksDown > 0 ? "down" : "up"} to="/sip-trunks" />
+        <KpiCard label="Extensions" value={stats.extensions}
+          sub={`${stats.extsOnline} en ligne`} trend="up" to="/extensions" />
+        <KpiCard label="Appels actifs" value={stats.activeCalls}
+          sub="En cours" trend="up" to="/calls" />
+        <KpiCard label="Alertes" value={stats.alerts}
+          sub="Non acquittées" trend={stats.alerts > 0 ? "down" : "none"} to="/alerts" />
       </div>
 
-      {/* ── Ligne centrale : Volume d'appels + Donut MOS ─────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-4">
+      {/* ── RANGÉE 2 : Volume d'appels (large) + Score MOS (fixe 260px) ── */}
+      {/*   Les deux cards ont exactement la même hauteur totale           */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-3">
 
-        {/* Volume d'appels */}
+        {/* Volume d'appels — hauteur fixe pour que le chart ne s'étire pas */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <Card>
-            <CardHeader title="Volume d'appels (24h)" />
+          <div className="bg-card border border-border rounded-2xl p-4" style={{ height: `${ROW2_H + 60}px` }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-foreground tracking-tight">Volume d'appels (24h)</h3>
+            </div>
             {callVolume.length > 0 ? (
-              <ResponsiveContainer width="100%" height={130}>
-                <BarChart data={callVolume} barCategoryGap="35%">
+              <ResponsiveContainer width="100%" height={ROW2_H}>
+                <BarChart data={callVolume} barCategoryGap="40%" margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <CartesianGrid {...chartGrid} />
                   <XAxis dataKey="h" tick={chartTick} axisLine={false} tickLine={false} />
                   <YAxis tick={chartTick} axisLine={false} tickLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="entrants" name="Appels" fill="#1A4D2E" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="entrants" name="Appels" fill="#1A4D2E" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[130px] flex items-center justify-center text-muted-foreground text-sm">
+              <div className="flex items-center justify-center text-muted-foreground text-sm" style={{ height: ROW2_H }}>
                 Aucun appel dans les 24 dernières heures
               </div>
             )}
-          </Card>
+          </div>
         </motion.div>
 
-        {/* Score MOS donut */}
+        {/* Score MOS — même hauteur totale que la card gauche */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <Card className="flex flex-col h-full">
-            <CardHeader title="Score MOS" />
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 py-2">
-              <div className="relative">
-                <Donut pct={mosTarget} color={mosColor} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-black text-foreground">
-                    {stats.mos > 0 ? stats.mos.toFixed(1) : "—"}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-semibold">/ 5.0</span>
-                </div>
-              </div>
-              <div className="w-full px-2">
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
-                  <div
-                    className="h-full rounded-full bg-amber-400 transition-all duration-700"
-                    style={{ width: `${trunkTarget}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-muted-foreground font-semibold">
-                  <span className="text-amber-500 font-black">{trunkTarget}%</span> trunks opérationnels
-                </p>
+          <div
+            className="bg-card border border-border rounded-2xl p-4 flex flex-col items-center justify-center gap-3"
+            style={{ height: `${ROW2_H + 60}px` }}
+          >
+            <h3 className="text-sm font-black text-foreground tracking-tight self-start w-full">Score MOS</h3>
+            <div className="relative">
+              <Donut pct={mosTarget} color={mosColor} />
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-black text-foreground">
+                  {stats.mos > 0 ? stats.mos.toFixed(1) : "—"}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-semibold">/ 5.0</span>
               </div>
             </div>
-          </Card>
+            <div className="w-full">
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
+                <div className="h-full rounded-full bg-amber-400 transition-all duration-700"
+                  style={{ width: `${trunkTarget}%` }} />
+              </div>
+              <p className="text-[11px] text-muted-foreground font-semibold">
+                <span className="text-amber-500 font-black">{trunkTarget}%</span> trunks opérationnels
+              </p>
+            </div>
+          </div>
         </motion.div>
       </div>
 
-      {/* ── Ligne basse : Trunks / MOS chart / Alertes ───────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* ── RANGÉE 3 : Trunks / MOS chart / Alertes — 3 cols égales, hauteur fixe ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
 
         {/* Statut SIP Trunks */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-          <Card>
-            <CardHeader
-              title="Statut SIP Trunks"
-              action={
-                <Link to="/sip-trunks">
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer">
-                    Voir tout
-                  </span>
-                </Link>
-              }
-            />
-            <div className="space-y-2">
+          <div className="bg-card border border-border rounded-2xl p-4" style={{ height: `${ROW3_H + 60}px`, overflow: "hidden" }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-foreground tracking-tight">Statut SIP Trunks</h3>
+              <Link to="/sip-trunks">
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline">Voir tout</span>
+              </Link>
+            </div>
+            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: `${ROW3_H + 20}px` }}>
               {trunks.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  Aucun trunk configuré
-                </p>
+                <p className="text-sm text-muted-foreground text-center py-6">Aucun trunk configuré</p>
               ) : trunks.map(trunk => (
-                <div
-                  key={trunk.id}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-xl
-                    bg-muted/40 dark:bg-muted/20
-                    hover:bg-muted/60 dark:hover:bg-muted/30
-                    transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{
-                        background: trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
-                        boxShadow: `0 0 6px ${trunk.status === "up" ? "#4CAF7D88" : "#E05C5C88"}`,
-                      }}
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-foreground font-mono">{trunk.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{trunk.host || "—"}</p>
+                <div key={trunk.id}
+                  className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/40 dark:bg-muted/20 hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{
+                      background: trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
+                      boxShadow: `0 0 5px ${trunk.status === "up" ? "#4CAF7D88" : "#E05C5C88"}`,
+                    }} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground font-mono truncate">{trunk.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{trunk.host || "—"}</p>
                     </div>
                   </div>
-                  <span
-                    className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full"
-                    style={{
-                      background: trunk.status === "up" ? "rgba(76,175,125,.15)" : "rgba(224,92,92,.15)",
-                      color:      trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
-                    }}
-                  >
+                  <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ml-2" style={{
+                    background: trunk.status === "up" ? "rgba(76,175,125,.15)" : "rgba(224,92,92,.15)",
+                    color: trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
+                  }}>
                     {trunk.status}
                   </span>
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
         </motion.div>
 
-        {/* MOS Chart */}
+        {/* MOS Score Chart */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Card>
-            <CardHeader title="MOS Score (24h)" />
+          <div className="bg-card border border-border rounded-2xl p-4" style={{ height: `${ROW3_H + 60}px` }}>
+            <h3 className="text-sm font-black text-foreground tracking-tight mb-3">MOS Score (24h)</h3>
             {qualityData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={qualityData}>
+              <ResponsiveContainer width="100%" height={ROW3_H}>
+                <AreaChart data={qualityData} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="mosFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#1A4D2E" stopOpacity={0.3} />
@@ -432,51 +401,36 @@ const Dashboard = () => {
                   <XAxis dataKey="time" tick={chartTick} axisLine={false} tickLine={false} />
                   <YAxis domain={[1, 5]} tick={chartTick} axisLine={false} tickLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Area
-                    type="monotone" dataKey="mos" name="MOS"
-                    stroke="#1A4D2E" fill="url(#mosFill)"
-                    strokeWidth={2.5} dot={false}
-                  />
+                  <Area type="monotone" dataKey="mos" name="MOS"
+                    stroke="#1A4D2E" fill="url(#mosFill)" strokeWidth={2.5} dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[180px] flex items-center justify-center text-muted-foreground text-sm">
+              <div className="flex items-center justify-center text-muted-foreground text-sm" style={{ height: ROW3_H }}>
                 Aucune donnée RTCP disponible
               </div>
             )}
-          </Card>
+          </div>
         </motion.div>
 
         {/* Alertes récentes */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-          <Card>
-            <CardHeader
-              title="Alertes récentes"
-              action={
-                stats.alerts > 0 ? (
-                  <Link to="/alerts">
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer">
-                      Voir tout
-                    </span>
-                  </Link>
-                ) : undefined
-              }
-            />
-            <div className="space-y-2">
+          <div className="bg-card border border-border rounded-2xl p-4" style={{ height: `${ROW3_H + 60}px`, overflow: "hidden" }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-foreground tracking-tight">Alertes récentes</h3>
+              {stats.alerts > 0 && (
+                <Link to="/alerts">
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline">Voir tout</span>
+                </Link>
+              )}
+            </div>
+            <div className="space-y-2 overflow-y-auto" style={{ maxHeight: `${ROW3_H + 20}px` }}>
               {recentAlerts.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  Aucune alerte non acquittée
-                </p>
+                <p className="text-sm text-muted-foreground text-center py-6">Aucune alerte non acquittée</p>
               ) : recentAlerts.map(alert => (
-                <div
-                  key={alert.id}
-                  className="flex gap-2.5 px-3 py-2.5 rounded-xl
-                    bg-muted/40 dark:bg-muted/20"
-                >
-                  <span
-                    className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                    style={{ background: alert.type === "critical" ? "#E05C5C" : "#F5A623" }}
-                  />
+                <div key={alert.id} className="flex gap-2 px-3 py-2 rounded-xl bg-muted/40 dark:bg-muted/20">
+                  <span className="w-2 h-2 rounded-full mt-1 shrink-0"
+                    style={{ background: alert.type === "critical" ? "#E05C5C" : "#F5A623" }} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-foreground truncate">{alert.title}</p>
                     <p className="text-[10px] text-muted-foreground truncate">{alert.message}</p>
@@ -487,11 +441,11 @@ const Dashboard = () => {
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
         </motion.div>
       </div>
 
-      {/* ── Objectifs / Target section ────────────────────────── */}
+      {/* ── RANGÉE 4 : Objectifs — 4 cards égales ──────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-black text-foreground tracking-tight">Objectifs</h3>
@@ -506,18 +460,13 @@ const Dashboard = () => {
             { label: "Score MOS",            pct: mosTarget,   color: "#E05C5C" },
             { label: "Extensions en ligne",  pct: extTarget,   color: "#4CAF7D" },
             { label: "Trunks opérationnels", pct: trunkTarget, color: "#F5A623" },
-            { label: "Disponibilité",         pct: availPct,   color: "#4A90D9" },
+            { label: "Disponibilité",        pct: availPct,    color: "#4A90D9" },
           ].map(({ label, pct, color }) => (
-            <div
-              key={label}
-              className="bg-card border border-border rounded-2xl px-4 py-4"
-            >
+            <div key={label} className="bg-card border border-border rounded-2xl px-4 py-4">
               <p className="text-xl font-black mb-2" style={{ color }}>{pct}%</p>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-2">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${pct}%`, background: color }}
-                />
+                <div className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${pct}%`, background: color }} />
               </div>
               <p className="text-[10px] font-semibold text-muted-foreground">{label}</p>
             </div>
