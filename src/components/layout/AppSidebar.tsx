@@ -50,7 +50,7 @@ const AppSidebar = () => {
             className="text-lg font-black text-foreground tracking-wide"
             style={{ fontFamily: "'Raleway', sans-serif" }}
           >
-            G<span className="text-primary dark:text-pink-300">VoIP</span>
+            G<span className="text-primary dark:text-sky-300">VoIP</span>
           </h1>
         </div>
       </div>
@@ -74,7 +74,7 @@ const AppSidebar = () => {
                     className={cn(
                       "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
                       isActive
-                        ? "text-primary dark:text-pink-300"
+                        ? "text-primary dark:text-sky-300"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
                     )}
                     style={
@@ -93,7 +93,7 @@ const AppSidebar = () => {
                     <item.icon
                       size={16}
                       strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-primary dark:text-pink-300" : "text-muted-foreground"}
+                      className={isActive ? "text-primary dark:text-sky-300" : "text-muted-foreground"}
                     />
                     {item.label}
                   </NavLink>
@@ -119,7 +119,7 @@ const AppSidebar = () => {
                     className={cn(
                       "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200",
                       isActive
-                        ? "text-primary dark:text-pink-300"
+                        ? "text-primary dark:text-sky-300"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
                     )}
                     style={
@@ -137,7 +137,7 @@ const AppSidebar = () => {
                     <item.icon
                       size={16}
                       strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-primary dark:text-pink-300" : "text-muted-foreground"}
+                      className={isActive ? "text-primary dark:text-sky-300" : "text-muted-foreground"}
                     />
                     {item.label}
                   </NavLink>
