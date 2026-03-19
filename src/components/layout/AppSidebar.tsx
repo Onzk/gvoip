@@ -135,10 +135,10 @@ const AppSidebar = () => {
       }}
     >
       {/* ── Logo ─────────────────────────────────────────────── */}
-      <div className="px-4 py-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <img src="/GVOIP.png" alt="GVoIP" className="w-8 h-8 object-contain shrink-0" />
-          <h1 className="text-base font-black text-foreground tracking-wide">
+      <div className="px-4 py-5 border-b border-border">
+        <div className="flex flex-col items-center gap-2">
+          <img src="/GVOIP.png" alt="GVoIP" className="w-12 h-12 object-contain" />
+          <h1 className="text-xl font-black text-foreground tracking-wide">
             G<span className="text-primary">VoIP</span>
           </h1>
         </div>
