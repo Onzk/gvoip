@@ -278,7 +278,7 @@ const Dashboard = () => {
       <div>
         <h1 className="text-2xl font-black text-foreground tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-0.5 font-medium">
-          Planifiez, priorisez et gérez votre infrastructure VoIP en temps réel.
+          Supervision en temps réel · Infrastructure VoIP
         </p>
       </div>
 
