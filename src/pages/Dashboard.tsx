@@ -66,7 +66,7 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", to }: KpiP
             : "bg-card border-border hover:border-primary/30 dark:hover:border-primary/40"}
         `}
         style={accent ? {
-          background: "linear-gradient(145deg, #9d2f68 0%, #c75590 40%, #EA82B5 75%, #EEB3D1 100%)",
+          background: "linear-gradient(145deg, #0277a8 0%, #0295cc 40%, #04AAEE 75%, #5ed0ff 100%)",
         } : undefined}
       >
         {/* Arrow top-right */}
@@ -130,7 +130,7 @@ const Donut = ({ pct, color = "hsl(var(--primary))" }: { pct: number; color?: st
     <svg width={130} height={130} viewBox="0 0 130 130">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stopColor="hsl(330 60% 81%)" />
+          <stop offset="0%"   stopColor="hsl(199 97% 70%)" />
           <stop offset="100%" stopColor="hsl(var(--primary))" />
         </linearGradient>
       </defs>
@@ -310,7 +310,7 @@ const Dashboard = () => {
                 <BarChart data={callVolume} barCategoryGap="40%" margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="hsl(330 60% 81%)" />
+                      <stop offset="0%"   stopColor="hsl(199 97% 70%)" />
                       <stop offset="100%" stopColor="hsl(var(--primary))" />
                     </linearGradient>
                   </defs>
@@ -379,7 +379,7 @@ const Dashboard = () => {
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{
                       background: trunk.status === "up" ? "hsl(var(--primary))" : "#E05C5C",
-                      boxShadow: `0 0 5px ${trunk.status === "up" ? "hsl(330 72% 71% / 0.6)" : "#E05C5C88"}`,
+                      boxShadow: `0 0 5px ${trunk.status === "up" ? "hsl(199 97% 48% / 0.6)" : "#E05C5C88"}`,
                     }} />
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-foreground font-mono truncate">{trunk.name}</p>
@@ -387,7 +387,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ml-2" style={{
-                    background: trunk.status === "up" ? "hsl(330 72% 71% / 0.15)" : "rgba(224,92,92,.15)",
+                    background: trunk.status === "up" ? "hsl(199 97% 48% / 0.15)" : "rgba(224,92,92,.15)",
                     color: trunk.status === "up" ? "hsl(var(--primary))" : "#E05C5C",
                   }}>
                     {trunk.status}
@@ -407,7 +407,7 @@ const Dashboard = () => {
                 <AreaChart data={qualityData} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="mosFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="hsl(330 60% 81%)" stopOpacity={0.35} />
+                      <stop offset="0%"   stopColor="hsl(199 97% 70%)" stopOpacity={0.35} />
                       <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0}    />
                     </linearGradient>
                   </defs>
