@@ -9,24 +9,33 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-/* ── Dark mode hook ─────────────────────────────────────── */
+/* ── Dark mode hook — persistance correcte au refresh ──── */
 const useDarkMode = () => {
-  const [dark, setDark] = useState(() =>
-    document.documentElement.classList.contains("dark")
-  );
+  const [dark, setDark] = useState(() => {
+    // Lire localStorage au premier render (pas dans useEffect)
+    // pour éviter le flash de thème au refresh
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark") {
+      document.documentElement.classList.add("dark");
+      return true;
+    }
+    if (stored === "light") {
+      document.documentElement.classList.remove("dark");
+      return false;
+    }
+    // Fallback : préférence système
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.classList.toggle("dark", prefersDark);
+    return prefersDark;
+  });
+
   const toggle = () => {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("theme", next ? "dark" : "light");
   };
-  useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    if (stored === "dark") {
-      setDark(true);
-      document.documentElement.classList.add("dark");
-    }
-  }, []);
+
   return { dark, toggle };
 };
 
