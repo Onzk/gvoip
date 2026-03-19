@@ -46,12 +46,12 @@ interface KpiProps {
 }
 
 const KpiCard = ({ label, value, sub, accent = false, trend = "none", to }: KpiProps) => {
-  const trendColor = trend === "up"   ? "text-emerald-500"
+  const trendColor = trend === "up"   ? "text-success"
                    : trend === "down" ? "text-red-500"
-                   : "text-amber-500";
-  const trendBg   = trend === "up"   ? "bg-emerald-500/15"
+                   : "text-primary";
+  const trendBg   = trend === "up"   ? "bg-success/15"
                   : trend === "down" ? "bg-red-500/15"
-                  : "bg-amber-500/15";
+                  : "bg-warning/15";
   const trendIcon = trend === "down" ? "↓" : trend === "warn" ? "!" : "↑";
 
   return (
@@ -62,11 +62,11 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", to }: KpiP
         className={`
           relative rounded-2xl p-5 border transition-all duration-200 cursor-pointer
           ${accent
-            ? "border-[#1A4D2E]"
+            ? "border-[hsl(var(--primary))]"
             : "bg-card border-border hover:border-primary/30 dark:hover:border-primary/40"}
         `}
         style={accent ? {
-          background: "linear-gradient(145deg, #1a3d28 0%, #1e5c35 40%, #2d7a4a 75%, #3a9460 100%)",
+          background: "linear-gradient(145deg, hsl(var(--primary)) 0%, #1e5c35 40%, hsl(var(--primary)) 75%, hsl(330 60% 81%) 100%)",
         } : undefined}
       >
         {/* Arrow top-right */}
@@ -121,7 +121,7 @@ const CardHeader = ({ title, action }: { title: string; action?: React.ReactNode
 );
 
 /* ── SVG Donut ────────────────────────────────────────────────── */
-const Donut = ({ pct, color = "#1A4D2E" }: { pct: number; color?: string }) => {
+const Donut = ({ pct, color = "hsl(var(--primary))" }: { pct: number; color?: string }) => {
   const r = 52;
   const circ = 2 * Math.PI * r;
   const dash = circ * Math.min(pct / 100, 1);
@@ -130,8 +130,8 @@ const Donut = ({ pct, color = "#1A4D2E" }: { pct: number; color?: string }) => {
     <svg width={130} height={130} viewBox="0 0 130 130">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stopColor="#3a9460" />
-          <stop offset="100%" stopColor="#1a3d28" />
+          <stop offset="0%"   stopColor="hsl(330 60% 81%)" />
+          <stop offset="100%" stopColor="hsl(var(--primary))" />
         </linearGradient>
       </defs>
       <circle cx="65" cy="65" r={r} fill="none"
@@ -265,7 +265,7 @@ const Dashboard = () => {
   const chartTick = { fill: "hsl(var(--muted-foreground))", fontSize: 10 };
 
   /* Couleur accent MOS */
-  const mosColor = stats.mos >= 4 ? "#1A4D2E" : stats.mos >= 3 ? "#F5A623" : "#E05C5C";
+  const mosColor = stats.mos >= 4 ? "hsl(var(--primary))" : stats.mos >= 3 ? "#F5A623" : "#E05C5C";
 
   /* Hauteurs fixes partagées pour aligner les rangées */
   const ROW2_H = 200; // px — Volume d'appels chart + Donut MOS
@@ -310,8 +310,8 @@ const Dashboard = () => {
                 <BarChart data={callVolume} barCategoryGap="40%" margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#3a9460" />
-                      <stop offset="100%" stopColor="#1a3d28" />
+                      <stop offset="0%"   stopColor="hsl(330 60% 81%)" />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid {...chartGrid} />
@@ -347,11 +347,11 @@ const Dashboard = () => {
             </div>
             <div className="w-full">
               <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
-                <div className="h-full rounded-full bg-amber-400 transition-all duration-700"
+                <div className="h-full rounded-full bg-primary transition-all duration-700"
                   style={{ width: `${trunkTarget}%` }} />
               </div>
               <p className="text-[11px] text-muted-foreground font-semibold">
-                <span className="text-amber-500 font-black">{trunkTarget}%</span> trunks opérationnels
+                <span className="text-primary font-black">{trunkTarget}%</span> trunks opérationnels
               </p>
             </div>
           </div>
@@ -367,7 +367,7 @@ const Dashboard = () => {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-black text-foreground tracking-tight">Statut SIP Trunks</h3>
               <Link to="/sip-trunks">
-                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline">Voir tout</span>
+                <span className="text-[10px] font-bold text-primary dark:text-primary hover:underline">Voir tout</span>
               </Link>
             </div>
             <div className="space-y-2 overflow-y-auto" style={{ maxHeight: `${ROW3_H + 20}px` }}>
@@ -378,8 +378,8 @@ const Dashboard = () => {
                   className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/40 dark:bg-muted/20 hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{
-                      background: trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
-                      boxShadow: `0 0 5px ${trunk.status === "up" ? "#4CAF7D88" : "#E05C5C88"}`,
+                      background: trunk.status === "up" ? "hsl(var(--success))" : "#E05C5C",
+                      boxShadow: `0 0 5px ${trunk.status === "up" ? "hsl(152 55% 45% / 0.5)" : "#E05C5C88"}`,
                     }} />
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-foreground font-mono truncate">{trunk.name}</p>
@@ -388,7 +388,7 @@ const Dashboard = () => {
                   </div>
                   <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full shrink-0 ml-2" style={{
                     background: trunk.status === "up" ? "rgba(76,175,125,.15)" : "rgba(224,92,92,.15)",
-                    color: trunk.status === "up" ? "#4CAF7D" : "#E05C5C",
+                    color: trunk.status === "up" ? "hsl(var(--success))" : "#E05C5C",
                   }}>
                     {trunk.status}
                   </span>
@@ -407,8 +407,8 @@ const Dashboard = () => {
                 <AreaChart data={qualityData} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="mosFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#3a9460" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#1a3d28" stopOpacity={0}    />
+                      <stop offset="0%"   stopColor="hsl(330 60% 81%)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0}    />
                     </linearGradient>
                   </defs>
                   <CartesianGrid {...chartGrid} />
@@ -416,7 +416,7 @@ const Dashboard = () => {
                   <YAxis domain={[1, 5]} tick={chartTick} axisLine={false} tickLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Area type="monotone" dataKey="mos" name="MOS"
-                    stroke="#2d7a4a" fill="url(#mosFill)" strokeWidth={2.5} dot={false} />
+                    stroke="hsl(var(--primary))" fill="url(#mosFill)" strokeWidth={2.5} dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -434,7 +434,7 @@ const Dashboard = () => {
               <h3 className="text-sm font-black text-foreground tracking-tight">Alertes récentes</h3>
               {stats.alerts > 0 && (
                 <Link to="/alerts">
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline">Voir tout</span>
+                  <span className="text-[10px] font-bold text-primary dark:text-primary hover:underline">Voir tout</span>
                 </Link>
               )}
             </div>
@@ -464,7 +464,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-black text-foreground tracking-tight">Objectifs</h3>
           <Link to="/quality">
-            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer">
+            <span className="text-[11px] font-bold text-primary dark:text-primary hover:underline cursor-pointer">
               Voir détails
             </span>
           </Link>
@@ -472,7 +472,7 @@ const Dashboard = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Score MOS",            pct: mosTarget,   color: "#E05C5C" },
-            { label: "Extensions en ligne",  pct: extTarget,   color: "#4CAF7D" },
+            { label: "Extensions en ligne",  pct: extTarget,   color: "hsl(var(--success))" },
             { label: "Trunks opérationnels", pct: trunkTarget, color: "#F5A623" },
             { label: "Disponibilité",        pct: availPct,    color: "#4A90D9" },
           ].map(({ label, pct, color }) => (
