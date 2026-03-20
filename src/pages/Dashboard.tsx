@@ -43,9 +43,11 @@ interface KpiProps {
   accent?: boolean;
   trend?: "up" | "down" | "warn" | "none";
   to: string;
+  icon?: React.ReactNode;
+  iconColor?: string;
 }
 
-const KpiCard = ({ label, value, sub, accent = false, trend = "none", to }: KpiProps) => {
+const KpiCard = ({ label, value, sub, accent = false, trend = "none", to, icon, iconColor }: KpiProps) => {
   const trendColor = trend === "up"   ? "text-success"
                    : trend === "down" ? "text-red-500"
                    : "text-primary";
@@ -69,15 +71,18 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", to }: KpiP
           background: "linear-gradient(145deg, #0277a8 0%, #0295cc 40%, #04AAEE 75%, #5ed0ff 100%)",
         } : undefined}
       >
-        {/* Arrow top-right */}
-        <div className={`
-          absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
-          ${accent ? "bg-white/15" : "bg-muted"}
-        `}>
-          <ArrowUpRight
-            size={13}
-            className={accent ? "text-white/80" : "text-muted-foreground"}
-          />
+        {/* Icon top-right */}
+        <div
+          className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
+          style={icon && iconColor
+            ? { background: `${iconColor}22` }
+            : { background: accent ? "rgba(255,255,255,0.15)" : "hsl(var(--muted))" }
+          }
+        >
+          {icon
+            ? <span style={{ color: accent ? "rgba(255,255,255,0.85)" : iconColor }}>{icon}</span>
+            : <ArrowUpRight size={13} className={accent ? "text-white/80" : "text-muted-foreground"} />
+          }
         </div>
 
         <p className={`text-[10px] font-bold tracking-widest uppercase mb-3
@@ -286,13 +291,17 @@ const Dashboard = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-stretch">
         <KpiCard label="SIP Trunks" value={stats.trunks}
           sub={`${stats.trunksUp} UP · ${stats.trunksDown} DOWN`}
-          accent trend={stats.trunksDown > 0 ? "down" : "up"} to="/sip-trunks" />
+          accent trend={stats.trunksDown > 0 ? "down" : "up"} to="/sip-trunks"
+          icon={<Network size={15} />} iconColor="#E05C5C" />
         <KpiCard label="Extensions" value={stats.extensions}
-          sub={`${stats.extsOnline} en ligne`} trend="up" to="/extensions" />
+          sub={`${stats.extsOnline} en ligne`} trend="up" to="/extensions"
+          icon={<Phone size={15} />} iconColor="hsl(186 97% 42%)" />
         <KpiCard label="Appels actifs" value={stats.activeCalls}
-          sub="En cours" trend="up" to="/calls" />
+          sub="En cours" trend="up" to="/calls"
+          icon={<PhoneCall size={15} />} iconColor="hsl(var(--success))" />
         <KpiCard label="Alertes" value={stats.alerts}
-          sub="Non acquittées" trend={stats.alerts > 0 ? "down" : "none"} to="/alerts" />
+          sub="Non acquittées" trend={stats.alerts > 0 ? "down" : "none"} to="/alerts"
+          icon={<AlertTriangle size={15} />} iconColor="#F5A623" />
       </div>
 
       {/* ── RANGÉE 2 : Volume d'appels (large) + Score MOS (fixe 260px) ── */}
