@@ -7,7 +7,7 @@ import {
   ArrowLeft, Server, Timer, X, Search, ArrowUpRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,11 +49,9 @@ interface KpiProps {
   trend?: "up" | "down" | "warn" | "none";
   onClick?: () => void;
   active?: boolean;
-  icon?: React.ReactNode;
-  iconColor?: string;
 }
 
-const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, active, icon, iconColor }: KpiProps) => {
+const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, active }: KpiProps) => {
   const trendIcon = trend === "down" ? "↓" : trend === "warn" ? "!" : "↑";
   const trendColor = trend === "up" ? "text-success" : trend === "down" ? "text-destructive" : "text-warning";
   const trendBg   = trend === "up" ? "bg-success/15" : trend === "down" ? "bg-destructive/15" : "bg-warning/15";
@@ -74,17 +72,8 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, a
         background: "linear-gradient(145deg, #0277a8 0%, #0295cc 40%, #04AAEE 75%, #5ed0ff 100%)",
       } : undefined}
     >
-      <div
-        className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
-        style={icon && iconColor
-          ? { background: isHighlighted ? "rgba(255,255,255,0.15)" : `${iconColor}22` }
-          : { background: isHighlighted ? "rgba(255,255,255,0.15)" : "hsl(var(--muted))" }
-        }
-      >
-        {icon
-          ? <span style={{ color: isHighlighted ? "rgba(255,255,255,0.85)" : iconColor }}>{icon}</span>
-          : <ArrowUpRight size={13} className={isHighlighted ? "text-white/80" : "text-muted-foreground"} />
-        }
+      <div className={`absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center ${isHighlighted ? "bg-white/15" : "bg-muted"}`}>
+        <ArrowUpRight size={13} className={isHighlighted ? "text-white/80" : "text-muted-foreground"} />
       </div>
       <p className={`text-[10px] font-bold tracking-widest uppercase mb-3 ${isHighlighted ? "text-white/70" : "text-muted-foreground"}`}>
         {label}
@@ -108,12 +97,13 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, a
 };
 
 /* ── Recharts tooltip ─────────────────────────────────────── */
-const ChartTooltip = ({ active, payload }: any) => {
+const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-border rounded-xl px-3 py-2 text-xs shadow-lg">
+      {label && <p className="text-muted-foreground mb-1 font-semibold">{label}</p>}
       {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.payload.color }} className="font-bold">
+        <p key={p.name} style={{ color: p.color || p.payload?.color }} className="font-bold">
           {p.name} : {p.value}
         </p>
       ))}
@@ -121,7 +111,7 @@ const ChartTooltip = ({ active, payload }: any) => {
   );
 };
 
-type DetailView = "trunks" | "extensions" | "calls" | "alerts" | null;
+type DetailView = "trunks" | "extensions" | "calls" | "alerts" | "mos" | "latency" | null;
 
 /* ═══════════════════════════════════════════════════════════
    COUNTRY DASHBOARD
@@ -134,6 +124,7 @@ const CountryDashboard = () => {
   const [extensions, setExtensions] = useState<any[]>([]);
   const [calls, setCalls]         = useState<any[]>([]);
   const [alerts, setAlerts]       = useState<any[]>([]);
+  const [mosChartData, setMosChartData] = useState<any[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeDetail, setActiveDetail] = useState<DetailView>(null);
   const [detailSearch, setDetailSearch] = useState("");
@@ -151,16 +142,42 @@ const CountryDashboard = () => {
       setIpbxList(ipbxs);
       if (ipbxs.length > 0) {
         const ipbxIds = ipbxs.map((i: any) => i.id);
-        const [trunkRes, extRes, callRes, alertRes] = await Promise.all([
+        const [trunkRes, extRes, callRes, alertByCountry, alertByIpbx] = await Promise.all([
           supabase.from("sip_trunks").select("*, ipbx:ipbx!sip_trunks_ipbx_id_fkey(name, ip_address)").in("ipbx_id", ipbxIds),
           supabase.from("extensions").select("*, ipbx:ipbx_id(name)").in("ipbx_id", ipbxIds),
-          supabase.from("calls").select("*, ipbx:ipbx_id(name)").in("ipbx_id", ipbxIds).order("started_at", { ascending: false }).limit(100),
+          supabase.from("calls").select("*, ipbx:ipbx_id(name)").in("ipbx_id", ipbxIds).order("started_at", { ascending: false }).limit(200),
           supabase.from("alerts").select("*").eq("country_id", id).order("created_at", { ascending: false }).limit(20),
+          supabase.from("alerts").select("*").in("ipbx_id", ipbxIds).order("created_at", { ascending: false }).limit(20),
         ]);
         setTrunks(trunkRes.data || []);
         setExtensions(extRes.data || []);
-        setCalls(callRes.data || []);
-        setAlerts(alertRes.data || []);
+        const callsData = callRes.data || [];
+        setCalls(callsData);
+
+        // Merge alerts from both queries, deduplicate by id
+        const allAlerts = [...(alertByCountry.data || []), ...(alertByIpbx.data || [])];
+        const uniqueAlerts = Array.from(new Map(allAlerts.map(a => [a.id, a])).values())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 20);
+        setAlerts(uniqueAlerts);
+
+        // MOS chart — group calls by hour
+        const since24h = new Date(Date.now() - 3600000 * 24).toISOString();
+        const recentCalls = callsData.filter((c: any) => c.started_at && c.started_at >= since24h && Number(c.mos) > 0);
+        if (recentCalls.length > 0) {
+          const groups = new Map<string, number[]>();
+          recentCalls.forEach((c: any) => {
+            const h = new Date(c.started_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+            if (!groups.has(h)) groups.set(h, []);
+            groups.get(h)!.push(Number(c.mos));
+          });
+          setMosChartData(
+            Array.from(groups.entries()).map(([time, vals]) => ({
+              time,
+              mos: parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)),
+            }))
+          );
+        }
       }
       setLoading(false);
     };
@@ -252,32 +269,32 @@ const CountryDashboard = () => {
           sub={`${kpis.trunksUp} UP · ${kpis.trunksDown} DOWN`}
           trend={kpis.trunksDown > 0 ? "down" : "up"}
           onClick={() => setActiveDetail(activeDetail === "trunks" ? null : "trunks")}
-          active={activeDetail === "trunks"}
-          icon={<Network size={15} />} iconColor="#E05C5C" />
+          active={activeDetail === "trunks"} />
         <KpiCard label="Extensions" value={extensions.length}
           sub={`${kpis.extOnline} en ligne`} trend="up"
           onClick={() => setActiveDetail(activeDetail === "extensions" ? null : "extensions")}
-          active={activeDetail === "extensions"}
-          icon={<Phone size={15} />} iconColor="hsl(186 97% 42%)" />
+          active={activeDetail === "extensions"} />
         <KpiCard label="Appels actifs" value={kpis.activeCalls}
           sub="En cours" trend="up"
           onClick={() => setActiveDetail(activeDetail === "calls" ? null : "calls")}
-          active={activeDetail === "calls"}
-          icon={<PhoneCall size={15} />} iconColor="hsl(var(--success))" />
+          active={activeDetail === "calls"} />
         <KpiCard label="MOS moyen"
           value={kpis.avgMos > 0 ? kpis.avgMos.toFixed(1) : "—"}
           sub={kpis.avgMos >= 4 ? "Qualité bonne" : kpis.avgMos > 0 ? "Dégradée" : "Pas de données"}
           trend={kpis.avgMos >= 4 ? "up" : kpis.avgMos > 0 ? "warn" : "none"}
+          onClick={() => setActiveDetail(activeDetail === "mos" ? null : "mos")}
+          active={activeDetail === "mos"}
           icon={<Gauge size={15} />} iconColor="hsl(var(--success))" />
         <KpiCard label="Latence moy."
           value={kpis.avgLatency > 0 ? `${kpis.avgLatency}ms` : "—"}
           sub="SIP Trunks" trend="none"
+          onClick={() => setActiveDetail(activeDetail === "latency" ? null : "latency")}
+          active={activeDetail === "latency"}
           icon={<Activity size={15} />} iconColor="hsl(199 97% 48%)" />
         <KpiCard label="Alertes" value={kpis.unackAlerts}
           sub="Non acquittées" trend={kpis.unackAlerts > 0 ? "down" : "none"}
           onClick={() => setActiveDetail(activeDetail === "alerts" ? null : "alerts")}
-          active={activeDetail === "alerts"}
-          icon={<AlertTriangle size={15} />} iconColor="#F5A623" />
+          active={activeDetail === "alerts"} />
       </div>
 
       {/* ── Detail Panel ────────────────────────────────────── */}
@@ -296,13 +313,17 @@ const CountryDashboard = () => {
                   {activeDetail === "extensions" && `Extensions — ${country.name}`}
                   {activeDetail === "calls"      && `Appels actifs — ${country.name}`}
                   {activeDetail === "alerts"     && `Alertes — ${country.name}`}
+                  {activeDetail === "mos"        && `MOS Score (24h) — ${country.name}`}
+                  {activeDetail === "latency"    && `Latence SIP Trunks — ${country.name}`}
                 </h3>
                 <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={detailSearch} onChange={e => setDetailSearch(e.target.value)}
-                      placeholder="Rechercher…" className="pl-8 h-8 text-xs w-48 rounded-xl" />
-                  </div>
+                  {!["mos", "latency"].includes(activeDetail ?? "") && (
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input value={detailSearch} onChange={e => setDetailSearch(e.target.value)}
+                        placeholder="Rechercher…" className="pl-8 h-8 text-xs w-48 rounded-xl" />
+                    </div>
+                  )}
                   <button onClick={() => { setActiveDetail(null); setDetailSearch(""); }}
                     className="w-7 h-7 rounded-xl bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors">
                     <X size={13} className="text-muted-foreground" />
@@ -438,6 +459,69 @@ const CountryDashboard = () => {
                   }
                 </div>
               )}
+              {/* MOS Chart */}
+              {activeDetail === "mos" && (
+                <div>
+                  {mosChartData.length === 0 ? (
+                    <p className="text-center text-muted-foreground text-sm py-6">Aucune donnée MOS disponible</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={mosChartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="mosFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="hsl(199 97% 70%)" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="time" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[1, 5]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Area type="monotone" dataKey="mos" name="MOS"
+                          stroke="hsl(var(--primary))" fill="url(#mosFill)" strokeWidth={2.5} dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+                    <span>MOS moyen : <strong className="text-foreground">{kpis.avgMos > 0 ? kpis.avgMos.toFixed(2) : "—"}</strong></span>
+                    <span>Basé sur <strong className="text-foreground">{calls.filter(c => Number(c.mos) > 0).length}</strong> appel(s)</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Latency Chart */}
+              {activeDetail === "latency" && (
+                <div>
+                  {trunks.length === 0 ? (
+                    <p className="text-center text-muted-foreground text-sm py-6">Aucun trunk disponible</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart
+                        data={trunks.map(t => ({ name: t.name, latency: t.latency || 0, status: t.status }))}
+                        margin={{ top: 4, right: 8, left: -20, bottom: 24 }}
+                        barCategoryGap="30%"
+                      >
+                        <defs>
+                          <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="hsl(199 97% 70%)" />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} axisLine={false} tickLine={false} angle={-25} textAnchor="end" />
+                        <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} axisLine={false} tickLine={false} unit="ms" />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Bar dataKey="latency" name="Latence (ms)" fill="url(#latGrad)" radius={[5, 5, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+                    <span>Latence moy. : <strong className="text-foreground">{kpis.avgLatency > 0 ? `${kpis.avgLatency}ms` : "—"}</strong></span>
+                    <span>Sur <strong className="text-foreground">{trunks.length}</strong> trunk(s)</span>
+                  </div>
+                </div>
+              )}
+
             </Card>
           </motion.div>
         )}
