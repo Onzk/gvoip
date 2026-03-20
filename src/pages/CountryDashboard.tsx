@@ -475,7 +475,7 @@ const CountryDashboard = () => {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card>
             <CardHeader title={`IPBX (${ipbxList.length})`} />
-            <div className="space-y-2">
+            <div className="space-y-2 min-h-[180px]">
               {ipbxList.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">Aucun IPBX</p>
               ) : ipbxList.map(ipbx => (
