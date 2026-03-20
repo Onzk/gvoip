@@ -49,9 +49,11 @@ interface KpiProps {
   trend?: "up" | "down" | "warn" | "none";
   onClick?: () => void;
   active?: boolean;
+  icon?: React.ReactNode;
+  iconColor?: string;
 }
 
-const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, active }: KpiProps) => {
+const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, active, icon, iconColor }: KpiProps) => {
   const trendIcon = trend === "down" ? "↓" : trend === "warn" ? "!" : "↑";
   const trendColor = trend === "up" ? "text-success" : trend === "down" ? "text-destructive" : "text-warning";
   const trendBg   = trend === "up" ? "bg-success/15" : trend === "down" ? "bg-destructive/15" : "bg-warning/15";
@@ -72,8 +74,17 @@ const KpiCard = ({ label, value, sub, accent = false, trend = "none", onClick, a
         background: "linear-gradient(145deg, #0277a8 0%, #0295cc 40%, #04AAEE 75%, #5ed0ff 100%)",
       } : undefined}
     >
-      <div className={`absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center ${isHighlighted ? "bg-white/15" : "bg-muted"}`}>
-        <ArrowUpRight size={13} className={isHighlighted ? "text-white/80" : "text-muted-foreground"} />
+      <div
+        className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
+        style={icon && iconColor
+          ? { background: isHighlighted ? "rgba(255,255,255,0.15)" : `${iconColor}22` }
+          : { background: isHighlighted ? "rgba(255,255,255,0.15)" : "hsl(var(--muted))" }
+        }
+      >
+        {icon
+          ? <span style={{ color: isHighlighted ? "rgba(255,255,255,0.85)" : iconColor }}>{icon}</span>
+          : <ArrowUpRight size={13} className={isHighlighted ? "text-white/80" : "text-muted-foreground"} />
+        }
       </div>
       <p className={`text-[10px] font-bold tracking-widest uppercase mb-3 ${isHighlighted ? "text-white/70" : "text-muted-foreground"}`}>
         {label}
@@ -128,6 +139,8 @@ const CountryDashboard = () => {
   const [loading, setLoading]     = useState(true);
   const [activeDetail, setActiveDetail] = useState<DetailView>(null);
   const [detailSearch, setDetailSearch] = useState("");
+  const [alertPage, setAlertPage] = useState(0);
+  const ALERTS_PER_PAGE = 10;
 
   useEffect(() => {
     if (!id) return;
@@ -146,8 +159,8 @@ const CountryDashboard = () => {
           supabase.from("sip_trunks").select("*, ipbx:ipbx!sip_trunks_ipbx_id_fkey(name, ip_address)").in("ipbx_id", ipbxIds),
           supabase.from("extensions").select("*, ipbx:ipbx_id(name)").in("ipbx_id", ipbxIds),
           supabase.from("calls").select("*, ipbx:ipbx_id(name)").in("ipbx_id", ipbxIds).order("started_at", { ascending: false }).limit(200),
-          supabase.from("alerts").select("*").eq("country_id", id).order("created_at", { ascending: false }).limit(20),
-          supabase.from("alerts").select("*").in("ipbx_id", ipbxIds).order("created_at", { ascending: false }).limit(20),
+          supabase.from("alerts").select("*").eq("country_id", id).order("created_at", { ascending: false }).limit(50),
+          supabase.from("alerts").select("*").in("ipbx_id", ipbxIds).order("created_at", { ascending: false }).limit(50),
         ]);
         setTrunks(trunkRes.data || []);
         setExtensions(extRes.data || []);
@@ -225,6 +238,8 @@ const CountryDashboard = () => {
     const q = detailSearch.toLowerCase();
     return !q || a.title.toLowerCase().includes(q) || a.message.toLowerCase().includes(q) || (a.source || "").toLowerCase().includes(q);
   });
+  const alertPageCount = Math.ceil(filteredDetailAlerts.length / ALERTS_PER_PAGE);
+  const pagedAlerts = filteredDetailAlerts.slice(alertPage * ALERTS_PER_PAGE, (alertPage + 1) * ALERTS_PER_PAGE);
 
   if (loading) return (
     <div className="space-y-4" style={{ fontFamily: "'Raleway', sans-serif" }}>
@@ -269,15 +284,18 @@ const CountryDashboard = () => {
           sub={`${kpis.trunksUp} UP · ${kpis.trunksDown} DOWN`}
           trend={kpis.trunksDown > 0 ? "down" : "up"}
           onClick={() => setActiveDetail(activeDetail === "trunks" ? null : "trunks")}
-          active={activeDetail === "trunks"} />
+          active={activeDetail === "trunks"}
+          icon={<Network size={15} />} iconColor="#E05C5C" />
         <KpiCard label="Extensions" value={extensions.length}
           sub={`${kpis.extOnline} en ligne`} trend="up"
           onClick={() => setActiveDetail(activeDetail === "extensions" ? null : "extensions")}
-          active={activeDetail === "extensions"} />
+          active={activeDetail === "extensions"}
+          icon={<Phone size={15} />} iconColor="hsl(186 97% 42%)" />
         <KpiCard label="Appels actifs" value={kpis.activeCalls}
           sub="En cours" trend="up"
           onClick={() => setActiveDetail(activeDetail === "calls" ? null : "calls")}
-          active={activeDetail === "calls"} />
+          active={activeDetail === "calls"}
+          icon={<PhoneCall size={15} />} iconColor="hsl(var(--success))" />
         <KpiCard label="MOS moyen"
           value={kpis.avgMos > 0 ? kpis.avgMos.toFixed(1) : "—"}
           sub={kpis.avgMos >= 4 ? "Qualité bonne" : kpis.avgMos > 0 ? "Dégradée" : "Pas de données"}
@@ -293,8 +311,9 @@ const CountryDashboard = () => {
           icon={<Activity size={15} />} iconColor="hsl(199 97% 48%)" />
         <KpiCard label="Alertes" value={kpis.unackAlerts}
           sub="Non acquittées" trend={kpis.unackAlerts > 0 ? "down" : "none"}
-          onClick={() => setActiveDetail(activeDetail === "alerts" ? null : "alerts")}
-          active={activeDetail === "alerts"} />
+          onClick={() => { setActiveDetail(activeDetail === "alerts" ? null : "alerts"); setAlertPage(0); }}
+          active={activeDetail === "alerts"}
+          icon={<AlertTriangle size={15} />} iconColor="#F5A623" />
       </div>
 
       {/* ── Detail Panel ────────────────────────────────────── */}
@@ -320,7 +339,7 @@ const CountryDashboard = () => {
                   {!["mos", "latency"].includes(activeDetail ?? "") && (
                     <div className="relative">
                       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input value={detailSearch} onChange={e => setDetailSearch(e.target.value)}
+                      <Input value={detailSearch} onChange={e => { setDetailSearch(e.target.value); setAlertPage(0); }}
                         placeholder="Rechercher…" className="pl-8 h-8 text-xs w-48 rounded-xl" />
                     </div>
                   )}
@@ -441,22 +460,63 @@ const CountryDashboard = () => {
 
               {/* Alerts */}
               {activeDetail === "alerts" && (
-                <div className="space-y-2">
-                  {filteredDetailAlerts.length === 0
-                    ? <p className="text-center text-muted-foreground text-sm py-6">Aucune alerte</p>
-                    : filteredDetailAlerts.map((alert, i) => (
-                      <motion.div key={alert.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                        className="flex gap-2.5 px-3 py-2.5 rounded-xl bg-muted/40 dark:bg-muted/20">
-                        <span className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                          style={{ background: alert.type === "critical" ? "hsl(var(--destructive))" : "hsl(var(--warning))" }} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-foreground truncate">{alert.title}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{alert.message}</p>
-                          <p className="text-[9px] text-muted-foreground font-mono mt-0.5">{new Date(alert.created_at).toLocaleString("fr-FR")}</p>
-                        </div>
-                      </motion.div>
-                    ))
-                  }
+                <div>
+                  <div className="space-y-2 mb-4">
+                    {pagedAlerts.length === 0
+                      ? <p className="text-center text-muted-foreground text-sm py-6">Aucune alerte</p>
+                      : pagedAlerts.map((alert, i) => (
+                        <motion.div key={alert.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                          className="flex gap-2.5 px-3 py-2.5 rounded-xl bg-muted/40 dark:bg-muted/20">
+                          <span className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                            style={{ background: alert.type === "critical" ? "hsl(var(--destructive))" : "hsl(var(--warning))" }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-foreground truncate">{alert.title}</p>
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0"
+                                style={{
+                                  background: alert.type === "critical" ? "rgba(224,92,92,.15)" : "rgba(245,166,35,.15)",
+                                  color: alert.type === "critical" ? "hsl(var(--destructive))" : "hsl(var(--warning))",
+                                }}>
+                                {alert.type || "info"}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate">{alert.message}</p>
+                            <p className="text-[9px] text-muted-foreground font-mono mt-0.5">{new Date(alert.created_at).toLocaleString("fr-FR")}</p>
+                          </div>
+                        </motion.div>
+                      ))
+                    }
+                  </div>
+                  {/* Pagination */}
+                  {alertPageCount > 1 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        {alertPage * ALERTS_PER_PAGE + 1}–{Math.min((alertPage + 1) * ALERTS_PER_PAGE, filteredDetailAlerts.length)} sur {filteredDetailAlerts.length} alerte(s)
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={alertPage === 0}
+                          onClick={() => setAlertPage(p => p - 1)}
+                          className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground hover:bg-muted/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >‹</button>
+                        {Array.from({ length: alertPageCount }).map((_, i) => (
+                          <button key={i} onClick={() => setAlertPage(i)}
+                            className="w-7 h-7 rounded-lg text-[10px] font-black transition-colors"
+                            style={i === alertPage
+                              ? { background: "hsl(var(--primary))", color: "white" }
+                              : { background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
+                            }>
+                            {i + 1}
+                          </button>
+                        ))}
+                        <button
+                          disabled={alertPage === alertPageCount - 1}
+                          onClick={() => setAlertPage(p => p + 1)}
+                          className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground hover:bg-muted/80 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >›</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {/* MOS Chart */}
