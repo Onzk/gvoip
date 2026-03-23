@@ -158,34 +158,37 @@ const SipLadderDiagram = ({ uniqueid, calldate }: { uniqueid: string; calldate: 
         data = res.data;
       }
 
-      // 1. Filtrer les paquets RTCP/RTP (payload JSON)
+      // Méthodes pertinentes pour un diagramme d'appel — OPTIONS/REGISTER exclus
+      // car ce sont des keepalives/enregistrements sans lien avec la conversation
       const CALL_METHODS = new Set(["INVITE","ACK","BYE","CANCEL",
-        "PRACK","REFER","UPDATE","INFO","NOTIFY","SUBSCRIBE","MESSAGE","OPTIONS","REGISTER",
-        "PUBLISH"]);
+        "PRACK","REFER","UPDATE","INFO","MESSAGE"]);
+
       const isSip = (f: SipFlow) => {
-        if (f.payload?.trimStart().startsWith("{")) return false;
+        if (f.payload?.trimStart().startsWith("{")) return false; // RTCP
         const m = (f.method ?? "").trim();
+        // Réponse numérique SIP (100 Trying, 180 Ringing, 200 OK, 4xx, 6xx...)
         const codeMatch = m.match(/^(\d{3})/);
         if (codeMatch) return parseInt(codeMatch[1]) >= 100 && parseInt(codeMatch[1]) <= 699;
         return CALL_METHODS.has(m.toUpperCase());
       };
       const sipFlows = (data || []).filter(isSip);
 
-      // 2. Identifier les IPs participantes depuis les messages de signalisation
-      //    d'appel (INVITE, BYE, CANCEL) — exclut les endpoints REGISTER/OPTIONS seuls
-      const SIGNALING = new Set(["INVITE","BYE","CANCEL","PRACK","REFER","UPDATE"]);
-      const callIps = new Set<string>();
-      sipFlows.forEach(f => {
-        const m = (f.method ?? "").trim().toUpperCase();
-        const isSignaling = SIGNALING.has(m) || /^(1[0-9]{2}|[2-6][0-9]{2})/.test(m);
-        if (isSignaling) { callIps.add(f.src_ip); callIps.add(f.dst_ip); }
-      });
-
-      // 3. Ne garder que les flows entre IPs de l'appel
-      //    Si callIps est vide (pas d'INVITE trouvé), on garde tout
-      const filtered = callIps.size > 0
-        ? sipFlows.filter(f => callIps.has(f.src_ip) && callIps.has(f.dst_ip))
-        : sipFlows;
+      // Trouver l'INVITE initial pour ancrer les IPs du dialog
+      const firstInvite = sipFlows.find(f => f.method?.trim().toUpperCase() === "INVITE");
+      let filtered = sipFlows;
+      if (firstInvite) {
+        // IPs du dialog = src + dst du premier INVITE (UAC, proxy, UAS)
+        // On suit les flows qui impliquent au moins une de ces IPs
+        const dialogIps = new Set([firstInvite.src_ip, firstInvite.dst_ip]);
+        // Élargir aux IPs contactées par ces IPs dans le reste du dialog
+        sipFlows.forEach(f => {
+          if (dialogIps.has(f.src_ip) || dialogIps.has(f.dst_ip)) {
+            dialogIps.add(f.src_ip);
+            dialogIps.add(f.dst_ip);
+          }
+        });
+        filtered = sipFlows.filter(f => dialogIps.has(f.src_ip) && dialogIps.has(f.dst_ip));
+      }
 
       setFlows(filtered);
       setLoading(false);
