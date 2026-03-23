@@ -124,23 +124,35 @@ class AMIClient:
         return number
 
     def upsert_call(self, uniqueid, caller, callee, caller_name="", callee_name="", codec=""):
-        """Enregistre ou met à jour un appel actif dans Supabase."""
+        """Enregistre un appel actif dans Supabase immédiatement, résout les noms en arrière-plan."""
         try:
-            resolved_caller = caller_name if (caller_name and caller_name != caller) else self._get_ext_name(caller)
-            resolved_callee = callee_name if (callee_name and callee_name != callee) else self._get_ext_name(callee)
-            existing = supabase.table("calls").select("id").eq("trunk_name", uniqueid).eq("status", "active").execute()
-            if not existing.data:
-                supabase.table("calls").insert({
-                    "caller": caller,
-                    "caller_name": resolved_caller,
-                    "callee": callee,
-                    "callee_name": resolved_callee,
-                    "status": "active",
-                    "codec": codec or "unknown",
-                    "trunk_name": uniqueid,
-                    "ipbx_id": self.ipbx_id,
-                }).execute()
-                logging.info(f"Nouveau appel: {caller} -> {callee} (uid={uniqueid})")
+            # INSERT immédiat avec les numéros bruts — pas d'attente de résolution de noms
+            # On utilise upsert sur trunk_name pour éviter les doublons sans SELECT préalable
+            supabase.table("calls").upsert({
+                "caller": caller,
+                "caller_name": caller_name or caller,
+                "callee": callee,
+                "callee_name": callee_name or callee,
+                "status": "active",
+                "codec": codec or "unknown",
+                "trunk_name": uniqueid,
+                "ipbx_id": self.ipbx_id,
+            }, on_conflict="trunk_name").execute()
+            logging.info(f"Nouveau appel: {caller} -> {callee} (uid={uniqueid})")
+
+            # Résolution des noms en arrière-plan pour ne pas bloquer l'affichage
+            def resolve_names():
+                try:
+                    rc = caller_name if (caller_name and caller_name != caller) else self._get_ext_name(caller)
+                    rd = callee_name if (callee_name and callee_name != callee) else self._get_ext_name(callee)
+                    if rc != caller or rd != callee:
+                        supabase.table("calls").update({
+                            "caller_name": rc,
+                            "callee_name": rd,
+                        }).eq("trunk_name", uniqueid).eq("status", "active").execute()
+                except Exception as e:
+                    logging.error(f"Erreur résolution noms: {e}")
+            threading.Thread(target=resolve_names, daemon=True).start()
         except Exception as e:
             logging.error(f"Erreur upsert call: {e}")
 
