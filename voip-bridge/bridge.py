@@ -126,9 +126,8 @@ class AMIClient:
     def upsert_call(self, uniqueid, caller, callee, caller_name="", callee_name="", codec=""):
         """Enregistre un appel actif dans Supabase immédiatement, résout les noms en arrière-plan."""
         try:
-            # INSERT immédiat avec les numéros bruts — pas d'attente de résolution de noms
-            # On utilise upsert sur trunk_name pour éviter les doublons sans SELECT préalable
-            supabase.table("calls").upsert({
+            # INSERT immédiat avec numéros bruts — aucun SELECT bloquant avant
+            supabase.table("calls").insert({
                 "caller": caller,
                 "caller_name": caller_name or caller,
                 "callee": callee,
@@ -137,10 +136,10 @@ class AMIClient:
                 "codec": codec or "unknown",
                 "trunk_name": uniqueid,
                 "ipbx_id": self.ipbx_id,
-            }, on_conflict="trunk_name").execute()
+            }).execute()
             logging.info(f"Nouveau appel: {caller} -> {callee} (uid={uniqueid})")
 
-            # Résolution des noms en arrière-plan pour ne pas bloquer l'affichage
+            # Résolution des noms en arrière-plan — ne bloque pas l'affichage
             def resolve_names():
                 try:
                     rc = caller_name if (caller_name and caller_name != caller) else self._get_ext_name(caller)
