@@ -1,7 +1,33 @@
 #!/usr/bin/env python3
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import json, subprocess, logging, os, socket
+import json, subprocess, logging, os, socket, threading, time, queue
 from urllib.parse import urlparse, parse_qs
+
+# SSE — liste des clients connectés par IPBX
+_sse_clients: dict[str, list[queue.Queue]] = {}  # ipbx_id -> [Queue]
+_sse_lock = threading.Lock()
+
+def sse_broadcast(ipbx_id: str, event: dict):
+    """Envoie un événement SSE à tous les clients abonnés à cet IPBX."""
+    data = f"data: {json.dumps(event)}\n\n"
+    with _sse_lock:
+        clients = _sse_clients.get(ipbx_id, [])
+        dead = []
+        for q in clients:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            clients.remove(q)
+
+def sse_broadcast_all(event: dict):
+    """Envoie un événement à tous les clients toutes IPBX confondues."""
+    with _sse_lock:
+        for clients in _sse_clients.values():
+            for q in clients:
+                try: q.put_nowait(f"data: {json.dumps(event)}\n\n")
+                except queue.Full: pass
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -178,6 +204,41 @@ class Handler(BaseHTTPRequestHandler):
             logging.info(f"Appels actifs {ip}: {len(active)}")
             self.send_json(200, {"active_calls": active, "total": len(active), "ip": ip})
 
+        # ── SSE : flux temps réel des appels ─────────────────────────────
+        elif parsed.path == "/api/events":
+            ipbx_id = params.get("ipbx_id", [""])[0]
+            q = queue.Queue(maxsize=100)
+            with _sse_lock:
+                _sse_clients.setdefault(ipbx_id, []).append(q)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            # Ping initial pour confirmer la connexion
+            try:
+                self.wfile.write(b"data: {"type":"connected"}\n\n")
+                self.wfile.flush()
+            except: pass
+            try:
+                while True:
+                    try:
+                        data = q.get(timeout=30)
+                        self.wfile.write(data.encode())
+                        self.wfile.flush()
+                    except queue.Empty:
+                        # Keepalive ping toutes les 30s
+                        self.wfile.write(b": ping\n\n")
+                        self.wfile.flush()
+            except Exception:
+                pass
+            finally:
+                with _sse_lock:
+                    clients = _sse_clients.get(ipbx_id, [])
+                    if q in clients:
+                        clients.remove(q)
+
         else:
             self.send_json(404, {"error": "route inconnue"})
 
@@ -209,6 +270,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {"status": "ok", "output": result.stdout})
             else:
                 self.send_json(500, {"status": "error", "output": result.stderr or result.stdout})
+        # ── Notification interne depuis bridge.py ────────────────────────
+        elif self.path == "/api/notify":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length))
+            ipbx_id = body.get("ipbx_id", "")
+            sse_broadcast(ipbx_id, body)
+            sse_broadcast_all(body)  # aussi sur le canal global
+            self.send_json(200, {"ok": True})
+
         else:
             self.send_json(404, {"error": "route inconnue"})
 

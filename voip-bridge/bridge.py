@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import requests
+import json
 import subprocess
 import time
 import logging
@@ -32,6 +33,20 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s'
 )
+
+def notify_sse(event: dict):
+    """Notifie l'api-server local pour diffuser via SSE — fire and forget."""    try:
+        import urllib.request
+        body = json.dumps(event).encode()
+        req = urllib.request.Request(
+            "http://127.0.0.1:8081/api/notify",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass  # SSE non critique — ne bloque pas
 
 # Initialisation Supabase
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -139,6 +154,19 @@ class AMIClient:
             }).execute()
             logging.info(f"Nouveau appel: {caller} -> {callee} (uid={uniqueid})")
 
+            # Push SSE immédiat — le frontend reçoit l'appel sans attendre Supabase realtime
+            notify_sse({
+                "type": "call_start",
+                "ipbx_id": self.ipbx_id,
+                "uniqueid": uniqueid,
+                "caller": caller,
+                "caller_name": caller_name or caller,
+                "callee": callee,
+                "callee_name": callee_name or callee,
+                "codec": codec or "unknown",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            })
+
             # Résolution des noms en arrière-plan — ne bloque pas l'affichage
             def resolve_names():
                 try:
@@ -180,6 +208,12 @@ class AMIClient:
                     "codec": call.get("codec"),
                 }, on_conflict="uniqueid").execute()
                 logging.info(f"Appel {uniqueid} archivé. Durée: {duration}s")
+                notify_sse({
+                    "type": "call_end",
+                    "ipbx_id": self.ipbx_id,
+                    "uniqueid": uniqueid,
+                    "duration": duration,
+                })
         except Exception as e:
             logging.error(f"Erreur fin d'appel: {e}")
 
