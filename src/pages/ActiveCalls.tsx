@@ -389,6 +389,55 @@ const ActiveCalls = () => {
   const [selectedCdr, setSelectedCdr] = useState<CDR | null>(null);
   const [ipbxList, setIpbxList] = useState<IPBX[]>([]);
 
+  // ── SSE : abonnement temps réel aux appels via chaque IPBX bridge ──────────
+  useEffect(() => {
+    if (!ipbxList.length) return;
+    const sources: EventSource[] = [];
+
+    ipbxList.forEach(ipbx => {
+      const ip = ipbx.ip_address || ipbx.host;
+      if (!ip) return;
+      const url = `http://${ip}:8081/api/events?ipbx_id=${ipbx.id}`;
+      const es = new EventSource(url);
+
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (event.type === "call_start") {
+            // Ajouter immédiatement sans attendre Supabase
+            setCalls(prev => {
+              if (prev.find(c => c.trunk_name === event.uniqueid)) return prev;
+              return [{
+                id: event.uniqueid,
+                caller: event.caller,
+                caller_name: event.caller_name,
+                callee: event.callee,
+                callee_name: event.callee_name,
+                status: "active",
+                started_at: event.started_at,
+                ended_at: null,
+                duration: null,
+                codec: event.codec,
+                mos: null,
+                jitter: null,
+                trunk_name: event.uniqueid,
+                ipbx_id: event.ipbx_id,
+                ipbx: { name: ipbx.name },
+              } as Call, ...prev];
+            });
+          } else if (event.type === "call_end") {
+            setCalls(prev => prev.filter(c => c.trunk_name !== event.uniqueid));
+          }
+        } catch {}
+      };
+
+      es.onerror = () => es.close();
+      sources.push(es);
+    });
+
+    return () => sources.forEach(es => es.close());
+  }, [ipbxList]);
+
   // Filtres CDR
   const [period, setPeriod] = useState("today");
   const [ipbxFilter, setIpbxFilter] = useState("all");
