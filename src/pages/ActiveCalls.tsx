@@ -133,7 +133,7 @@ const getSipColor = (method: string) => {
   return "#94a3b8";
 };
 
-const SipLadderDiagram = ({ uniqueid, calldate }: { uniqueid: string; calldate: string }) => {
+const SipLadderDiagram = ({ uniqueid, calldate, src, dst }: { uniqueid: string; calldate: string; src?: string; dst?: string }) => {
   const [flows, setFlows] = useState<SipFlow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SipFlow | null>(null);
@@ -148,43 +148,62 @@ const SipLadderDiagram = ({ uniqueid, calldate }: { uniqueid: string; calldate: 
         .order("created_at", { ascending: true });
 
       if (!data || data.length === 0) {
+        // uniqueid Asterisk != SIP Call-ID : fallback par fenêtre temporelle
+        // On filtre ensuite par src/dst pour isoler cet appel parmi les concurrents
         const t = new Date(calldate);
         const from = new Date(t.getTime() - 5000).toISOString();
         const to   = new Date(t.getTime() + 180000).toISOString();
         const res  = await supabase
           .from("sip_flows").select("*")
           .gte("created_at", from).lte("created_at", to)
-          .order("created_at", { ascending: true }).limit(200);
-        data = res.data;
+          .order("created_at", { ascending: true }).limit(500);
+        // Filtrer par numéros src/dst dans le payload (headers From/To/Contact)
+        // pour ne garder que les flows de CET appel parmi tous les appels concurrent
+        if (res.data && (src || dst)) {
+          const terms = [src, dst].filter(Boolean) as string[];
+          data = res.data.filter(f =>
+            terms.some(t => f.payload?.includes(t))
+          );
+        } else {
+          data = res.data;
+        }
       }
 
-      // Méthodes pertinentes pour un diagramme d'appel — OPTIONS/REGISTER exclus
-      // car ce sont des keepalives/enregistrements sans lien avec la conversation
-      const CALL_METHODS = new Set(["INVITE","ACK","BYE","CANCEL",
-        "PRACK","REFER","UPDATE","INFO","MESSAGE"]);
+      // Méthodes de signalisation d'appel (hors OPTIONS/REGISTER qui sont des keepalives)
+      const CALL_METHODS = new Set(["INVITE","ACK","BYE","CANCEL","PRACK","REFER","UPDATE","INFO","MESSAGE"]);
+      const EXCLUDED_CSEQ = new Set(["OPTIONS","REGISTER"]); // réponses à exclure via CSeq
+
+      const getCseqMethod = (payload: string): string => {
+        // Extrait la méthode du header CSeq : "CSeq: 1 OPTIONS" → "OPTIONS"
+        const match = payload?.match(/CSeq:\s*\d+\s+(\w+)/i);
+        return match ? match[1].toUpperCase() : "";
+      };
 
       const isSip = (f: SipFlow) => {
         if (f.payload?.trimStart().startsWith("{")) return false; // RTCP
         const m = (f.method ?? "").trim();
-        // Réponse numérique SIP (100 Trying, 180 Ringing, 200 OK, 4xx, 6xx...)
         const codeMatch = m.match(/^(\d{3})/);
-        if (codeMatch) return parseInt(codeMatch[1]) >= 100 && parseInt(codeMatch[1]) <= 699;
+        if (codeMatch) {
+          const code = parseInt(codeMatch[1]);
+          if (code < 100 || code > 699) return false;
+          // Pour les réponses, vérifier que le CSeq ne correspond pas à OPTIONS/REGISTER
+          const cseqMethod = getCseqMethod(f.payload ?? "");
+          if (cseqMethod && EXCLUDED_CSEQ.has(cseqMethod)) return false;
+          return true;
+        }
         return CALL_METHODS.has(m.toUpperCase());
       };
+
       const sipFlows = (data || []).filter(isSip);
 
-      // Trouver l'INVITE initial pour ancrer les IPs du dialog
+      // Ancrer le dialog sur le premier INVITE et propager les IPs
       const firstInvite = sipFlows.find(f => f.method?.trim().toUpperCase() === "INVITE");
       let filtered = sipFlows;
       if (firstInvite) {
-        // IPs du dialog = src + dst du premier INVITE (UAC, proxy, UAS)
-        // On suit les flows qui impliquent au moins une de ces IPs
         const dialogIps = new Set([firstInvite.src_ip, firstInvite.dst_ip]);
-        // Élargir aux IPs contactées par ces IPs dans le reste du dialog
         sipFlows.forEach(f => {
           if (dialogIps.has(f.src_ip) || dialogIps.has(f.dst_ip)) {
-            dialogIps.add(f.src_ip);
-            dialogIps.add(f.dst_ip);
+            dialogIps.add(f.src_ip); dialogIps.add(f.dst_ip);
           }
         });
         filtered = sipFlows.filter(f => dialogIps.has(f.src_ip) && dialogIps.has(f.dst_ip));
@@ -341,7 +360,7 @@ const CDRDetail = ({ cdr, onClose }: { cdr: CDR | null; onClose: () => void }) =
               <AnimatePresence>
                 {showSip && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                    <div className="p-3"><SipLadderDiagram uniqueid={cdr.uniqueid} calldate={cdr.calldate} /></div>
+                    <div className="p-3"><SipLadderDiagram uniqueid={cdr.uniqueid} calldate={cdr.calldate} src={cdr.src} dst={cdr.dst} /></div>
                   </motion.div>
                 )}
               </AnimatePresence>
