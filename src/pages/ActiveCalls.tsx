@@ -149,16 +149,19 @@ const SipLadderDiagram = ({ uniqueid, calldate }: { uniqueid: string; calldate: 
         const res = await supabase.from("sip_flows").select("*").gte("created_at", from).lte("created_at", to).order("created_at", { ascending: true }).limit(100);
         data = res.data;
       }
-      // Filtrer les paquets RTCP/RTP (payload JSON) et ne garder que les vrais messages SIP
+      // Filtrer les paquets RTCP/RTP : seul critère fiable = payload JSON
       const SIP_METHODS = new Set(["INVITE","ACK","BYE","CANCEL","OPTIONS","REGISTER",
         "PRACK","SUBSCRIBE","NOTIFY","PUBLISH","INFO","REFER","MESSAGE","UPDATE"]);
       const isSip = (f: SipFlow) => {
-        if (f.payload?.trimStart().startsWith("{")) return false; // payload JSON = RTCP
-        if (/^\d+$/.test(f.method)) {
-          const code = parseInt(f.method);
-          return code >= 100 && code <= 699; // codes SIP valides uniquement
-        }
-        return SIP_METHODS.has(f.method?.toUpperCase());
+        // Payload JSON → RTCP/RTP, exclure
+        if (f.payload?.trimStart().startsWith("{")) return false;
+        const m = (f.method ?? "").trim();
+        // Réponse SIP : "200 OK", "100 Trying", "401 Unauthorized", "183 Session Progress"
+        // method peut contenir code + texte — on extrait les 3 premiers chiffres
+        const codeMatch = m.match(/^(\d{3})/);
+        if (codeMatch) return parseInt(codeMatch[1]) >= 100 && parseInt(codeMatch[1]) <= 699;
+        // Méthode SIP nommée : INVITE, BYE, ACK, CANCEL...
+        return SIP_METHODS.has(m.toUpperCase());
       };
       setFlows((data || []).filter(isSip));
       setLoading(false);
