@@ -141,29 +141,53 @@ const SipLadderDiagram = ({ uniqueid, calldate }: { uniqueid: string; calldate: 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      let { data } = await supabase.from("sip_flows").select("*").eq("call_id", uniqueid).order("created_at", { ascending: true });
+
+      let { data } = await supabase
+        .from("sip_flows").select("*")
+        .eq("call_id", uniqueid)
+        .order("created_at", { ascending: true });
+
       if (!data || data.length === 0) {
         const t = new Date(calldate);
         const from = new Date(t.getTime() - 5000).toISOString();
-        const to = new Date(t.getTime() + 180000).toISOString();
-        const res = await supabase.from("sip_flows").select("*").gte("created_at", from).lte("created_at", to).order("created_at", { ascending: true }).limit(100);
+        const to   = new Date(t.getTime() + 180000).toISOString();
+        const res  = await supabase
+          .from("sip_flows").select("*")
+          .gte("created_at", from).lte("created_at", to)
+          .order("created_at", { ascending: true }).limit(200);
         data = res.data;
       }
-      // Filtrer les paquets RTCP/RTP : seul critère fiable = payload JSON
-      const SIP_METHODS = new Set(["INVITE","ACK","BYE","CANCEL","OPTIONS","REGISTER",
-        "PRACK","SUBSCRIBE","NOTIFY","PUBLISH","INFO","REFER","MESSAGE","UPDATE"]);
+
+      // 1. Filtrer les paquets RTCP/RTP (payload JSON)
+      const CALL_METHODS = new Set(["INVITE","ACK","BYE","CANCEL",
+        "PRACK","REFER","UPDATE","INFO","NOTIFY","SUBSCRIBE","MESSAGE","OPTIONS","REGISTER",
+        "PUBLISH"]);
       const isSip = (f: SipFlow) => {
-        // Payload JSON → RTCP/RTP, exclure
         if (f.payload?.trimStart().startsWith("{")) return false;
         const m = (f.method ?? "").trim();
-        // Réponse SIP : "200 OK", "100 Trying", "401 Unauthorized", "183 Session Progress"
-        // method peut contenir code + texte — on extrait les 3 premiers chiffres
         const codeMatch = m.match(/^(\d{3})/);
         if (codeMatch) return parseInt(codeMatch[1]) >= 100 && parseInt(codeMatch[1]) <= 699;
-        // Méthode SIP nommée : INVITE, BYE, ACK, CANCEL...
-        return SIP_METHODS.has(m.toUpperCase());
+        return CALL_METHODS.has(m.toUpperCase());
       };
-      setFlows((data || []).filter(isSip));
+      const sipFlows = (data || []).filter(isSip);
+
+      // 2. Identifier les IPs participantes depuis les messages de signalisation
+      //    d'appel (INVITE, BYE, CANCEL) — exclut les endpoints REGISTER/OPTIONS seuls
+      const SIGNALING = new Set(["INVITE","BYE","CANCEL","PRACK","REFER","UPDATE"]);
+      const callIps = new Set<string>();
+      sipFlows.forEach(f => {
+        const m = (f.method ?? "").trim().toUpperCase();
+        const isSignaling = SIGNALING.has(m) || /^(1[0-9]{2}|[2-6][0-9]{2})/.test(m);
+        if (isSignaling) { callIps.add(f.src_ip); callIps.add(f.dst_ip); }
+      });
+
+      // 3. Ne garder que les flows entre IPs de l'appel
+      //    Si callIps est vide (pas d'INVITE trouvé), on garde tout
+      const filtered = callIps.size > 0
+        ? sipFlows.filter(f => callIps.has(f.src_ip) && callIps.has(f.dst_ip))
+        : sipFlows;
+
+      setFlows(filtered);
       setLoading(false);
     };
     load();
