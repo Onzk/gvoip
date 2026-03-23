@@ -181,6 +181,14 @@ class AMIClient:
                             "caller_name": rc,
                             "callee_name": rd,
                         }).eq("trunk_name", uniqueid).eq("status", "active").execute()
+                        # Notifier le frontend via SSE pour mise à jour immédiate des noms
+                        notify_sse({
+                            "type": "call_update",
+                            "ipbx_id": self.ipbx_id,
+                            "uniqueid": uniqueid,
+                            "caller_name": rc,
+                            "callee_name": rd,
+                        })
                 except Exception as e:
                     logging.error(f"Erreur résolution noms: {e}")
             threading.Thread(target=resolve_names, daemon=True).start()
