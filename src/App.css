@@ -5,6 +5,20 @@
   text-align: center;
 }
 
+.blink {
+    /* Apply the animation */
+    animation: blink-effect 1s step-end infinite;
+    /* Ensure the element is displayed correctly, e.g., inline-block */
+    display: inline-block; 
+}
+
+/* Define the animation */
+@keyframes blink-effect {
+    50% {
+        opacity: 0;
+    }
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
