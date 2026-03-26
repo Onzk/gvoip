@@ -1,16 +1,21 @@
-import { useEffect, useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/noc/StatusBadge";
-import {
-  Network, Phone, PhoneCall, Gauge, Activity, AlertTriangle,
-  ArrowLeft, Server, Timer, X, Search, ArrowUpRight,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+    Activity, AlertTriangle,
+    ArrowLeft,
+    ArrowUpRight,
+    Gauge,
+    Network, Phone, PhoneCall,
+    Search,
+    Timer, X
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 /* ── Helpers ──────────────────────────────────────────────── */
 const formatDuration = (seconds: number) => {
@@ -242,7 +247,7 @@ const CountryDashboard = () => {
   const pagedAlerts = filteredDetailAlerts.slice(alertPage * ALERTS_PER_PAGE, (alertPage + 1) * ALERTS_PER_PAGE);
 
   if (loading) return (
-    <div className="space-y-4" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-4" style={{ fontFamily: "Raleway, sans-serif" }}>
       <Skeleton className="h-8 w-64 rounded-xl" />
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
@@ -258,7 +263,7 @@ const CountryDashboard = () => {
   );
 
   return (
-    <div className="space-y-4 pb-8" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-4 pb-8" style={{ fontFamily: "Raleway, sans-serif" }}>
 
       {/* ── En-tête ─────────────────────────────────────────── */}
       <div className="flex items-center gap-3">

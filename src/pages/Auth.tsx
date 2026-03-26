@@ -106,7 +106,7 @@ const Auth = () => {
             className={`absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
               dark
                 ? "bg-[#1a1a1a] border border-[#2a2a2a] text-slate-400 hover:text-yellow-400 hover:border-yellow-400/30 hover:bg-[#1f1f1f]"
-                : "bg-slate-100 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50"
+                : "bg-slate-100 border border-slate-200 text-slate-500 hover:text-cyan-600 hover:border-cyan-200 hover:bg-cyan-50"
             }`}
             aria-label="Toggle theme"
           >
@@ -162,8 +162,8 @@ const Auth = () => {
                 required
                 className={`w-full rounded-lg pl-9 pr-3 py-[11px] text-[14px] outline-none transition-all duration-200 focus:ring-1 ${
                   dark
-                    ? "bg-[#0d0d0d] border border-[#272727] text-[#ccc] placeholder:text-[#3a3a3a] focus:border-indigo-500 focus:ring-indigo-500/20"
-                    : "bg-slate-50 border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-indigo-400/20"
+                    ? "bg-[#0d0d0d] border border-[#272727] text-[#ccc] placeholder:text-[#3a3a3a] focus:border-cyan-500 focus:ring-cyan-500/20"
+                    : "bg-slate-50 border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-cyan-400/20"
                 }`}
               />
             </div>
@@ -180,8 +180,8 @@ const Auth = () => {
                 minLength={6}
                 className={`w-full rounded-lg pl-9 pr-3 py-[11px] text-[14px] outline-none transition-all duration-200 focus:ring-1 ${
                   dark
-                    ? "bg-[#0d0d0d] border border-[#272727] text-[#ccc] placeholder:text-[#3a3a3a] focus:border-indigo-500 focus:ring-indigo-500/20"
-                    : "bg-slate-50 border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-indigo-400/20"
+                    ? "bg-[#0d0d0d] border border-[#272727] text-[#ccc] placeholder:text-[#3a3a3a] focus:border-cyan-500 focus:ring-cyan-500/20"
+                    : "bg-slate-50 border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-cyan-400/20"
                 }`}
               />
             </div>
@@ -192,8 +192,8 @@ const Auth = () => {
               disabled={loading}
               className={`w-full mt-1 rounded-lg py-[11px] text-[14px] font-semibold text-white flex items-center justify-center gap-2 transition-all duration-200 tracking-[0.01em] ${
                 loading
-                  ? "bg-indigo-700 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] cursor-pointer"
+                  ? "bg-cyan-700 cursor-not-allowed"
+                  : "bg-cyan-600 hover:bg-cyan-700 active:scale-[0.99] cursor-pointer"
               }`}
             >
               {loading && <Loader2 size={14} className="animate-spin" />}

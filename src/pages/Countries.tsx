@@ -1,17 +1,16 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import {
+    Dialog, DialogContent, DialogHeader,
+    DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogHeader,
-  DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import { Globe, Plus, Pencil, Trash2, BarChart3, Search } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
+import { BarChart3, Globe, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Country {
   id: string;
@@ -102,7 +101,7 @@ const Countries = () => {
   });
 
   return (
-    <div className="space-y-5 pb-8" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-5 pb-8" style={{ fontFamily: "Raleway, sans-serif" }}>
 
       {/* ── En-tête ─────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">

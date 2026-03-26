@@ -1,23 +1,29 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { StatusBadge } from "@/components/noc/StatusBadge";
-import {
-  Network, Phone, PhoneCall, Activity, AlertTriangle,
-  TrendingUp, Gauge, Wifi, ArrowUpRight,
-} from "lucide-react";
 import { motion } from "framer-motion";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar,
-} from "recharts";
+  AlertTriangle,
+  ArrowUpRight,
+  Network, Phone, PhoneCall
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis,
+} from "recharts";
 
 /* ─────────────────────────────────────────────────────────────────
    NOTE : ajoute dans ton index.css (ou global CSS) :
    @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800;900&display=swap');
-   body { font-family: 'Raleway', sans-serif; }
+   body { font-family: Raleway, sans-serif; }
 ───────────────────────────────────────────────────────────────── */
 
 /* ── Recharts custom tooltip — s'adapte light/dark via Tailwind ── */
@@ -277,11 +283,11 @@ const Dashboard = () => {
   const ROW3_H = 200; // px — Trunks list, MOS chart, Alertes
 
   return (
-    <div className="space-y-4 pb-8" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-4 pb-8" style={{ fontFamily: "Raleway, sans-serif" }}>
 
       {/* ── En-tête ──────────────────────────────────────────── */}
       <div>
-        <h1 className="text-2xl font-black text-foreground tracking-tight">Dashboard</h1>
+        <h1 className="text-2xl font-black text-foreground tracking-tight mono">Dashboard</h1>
         <p className="text-sm text-muted-foreground mt-0.5 font-medium">
           Supervision en temps réel · Infrastructure VoIP
         </p>

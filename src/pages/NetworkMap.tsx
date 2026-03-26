@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, ZoomIn, ZoomOut, RotateCcw, Maximize2, Server, Activity, Save, Lock, Unlock, Move } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Activity, Lock, Maximize2, Move, RefreshCw, RotateCcw, Save, Server, Unlock, ZoomIn, ZoomOut } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface IPBX { id:string;name:string;ip_address:string;status:string;ping_latency:number|null; }
 interface SipTrunk { id:string;name:string;ipbx_id:string;remote_ipbx_id:string|null;status:string;latency:number|null;channels:number|null;max_channels:number|null;provider:string|null;remote_ip:string|null;local_ip:string|null; }
@@ -401,14 +401,14 @@ const NetworkMap = () => {
   }:{};
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} className="w-full">
     <div className={full?"":"space-y-4"} style={full?{display:"flex",flexDirection:"column",gap:16,height:"100%"}:{}}>
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
         <div>
           <h1 style={{fontSize:20,fontWeight:700,color:C.text,fontFamily:"Raleway,sans-serif",display:"flex",alignItems:"center",gap:8,margin:0}}>
-            <Activity size={18} color={C.teal}/> Network Map
+            <Activity size={18} color={C.teal}/> Carte réseaus
           </h1>
           <p style={{fontSize:12,color:C.muted,fontFamily:"Raleway,sans-serif",margin:0}}>Topologie VoIP en temps réel</p>
         </div>
@@ -457,8 +457,19 @@ const NetworkMap = () => {
         </div>
       </div>
 
+      {/* Stats row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
+        {stats.map(s=>(
+          <div key={s.l} style={{background:"hsl(var(--card))",border:"1px solid hsl(var(--border))",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            <p style={{fontSize:10,color:C.muted,fontFamily:"Raleway,sans-serif",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 4px"}}>{s.l}</p>
+            <p style={{fontSize:24,fontWeight:800,color:s.c,fontFamily:"Raleway,sans-serif",margin:"0 0 2px",lineHeight:1}}>{s.v}</p>
+            <p style={{fontSize:10,color:"hsl(var(--muted-foreground))",fontFamily:"Raleway,sans-serif",margin:0,opacity:0.6}}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
       {/* Map */}
-      <div style={{borderRadius:16,overflow:"hidden",border:"1px solid hsl(var(--border))",background:"hsl(var(--background))",boxShadow:"0 1px 8px rgba(0,0,0,0.08)",position:"relative",flex:full?1:undefined}}>
+      <div style={{borderRadius:16,overflow:"hidden",position:"relative",flex:full?1:undefined}} className="mt-4 md:h-[50rem]">
         {/* Edit mode banner */}
         {editMode && isAdmin && (
           <div style={{position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",zIndex:3,
@@ -508,17 +519,6 @@ const NetworkMap = () => {
         <div style={{position:"absolute",bottom:10,right:12,zIndex:2,background:"rgba(255,255,255,0.9)",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 9px",fontSize:11,color:C.muted,fontFamily:"Raleway,sans-serif",backdropFilter:"blur(4px)"}}>
           {Math.round(zoom*100)}%
         </div>
-      </div>
-
-      {/* Stats row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
-        {stats.map(s=>(
-          <div key={s.l} style={{background:"hsl(var(--card))",border:"1px solid hsl(var(--border))",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-            <p style={{fontSize:10,color:C.muted,fontFamily:"Raleway,sans-serif",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 4px"}}>{s.l}</p>
-            <p style={{fontSize:24,fontWeight:800,color:s.c,fontFamily:"Raleway,sans-serif",margin:"0 0 2px",lineHeight:1}}>{s.v}</p>
-            <p style={{fontSize:10,color:"hsl(var(--muted-foreground))",fontFamily:"Raleway,sans-serif",margin:0,opacity:0.6}}>{s.sub}</p>
-          </div>
-        ))}
       </div>
 
       {/* Legend */}

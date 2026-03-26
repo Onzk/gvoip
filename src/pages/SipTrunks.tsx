@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAllowedIpbx } from "@/hooks/useAllowedIpbx";
-import { StatusBadge } from "@/components/noc/StatusBadge";
-import { Network, Clock, AlertTriangle, RefreshCw, Search } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
+import { AlertTriangle, Clock, Network, RefreshCw, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface SipTrunk {
   id: string;
@@ -65,7 +64,7 @@ const SipTrunks = () => {
   const degCount  = trunks.filter(t => t.status === "degraded").length;
 
   return (
-    <div className="space-y-5 pb-8" style={{ fontFamily: "'Raleway', sans-serif" }}>
+    <div className="space-y-5 pb-8" style={{ fontFamily: "Raleway, sans-serif" }}>
 
       {/* ── En-tête ─────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">

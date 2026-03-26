@@ -1,29 +1,35 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
-import { useEffect, useState } from "react";
-import {
-  LayoutDashboard, Network, Phone, PhoneCall, Activity,
-  Bell, Shield, Globe, Server, Users, LogOut, Map,
-  Moon, Sun,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
+import {
+  Activity,
+  Bell,
+  ChevronLeft,
+  ChevronRight,
+  Globe,
+  LayoutDashboard,
+  LogOut,
+  Map,
+  Menu,
+  Moon,
+  Network,
+  Phone,
+  PhoneCall,
+  Server,
+  Sun,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 
-/* ── Dark mode hook — persistance correcte au refresh ──── */
+/* ── Dark mode avec persistance ───────────────────────────── */
 const useDarkMode = () => {
   const [dark, setDark] = useState(() => {
-    // Lire localStorage au premier render (pas dans useEffect)
-    // pour éviter le flash de thème au refresh
     const stored = localStorage.getItem("theme");
-    if (stored === "dark") {
-      document.documentElement.classList.add("dark");
-      return true;
-    }
-    if (stored === "light") {
-      document.documentElement.classList.remove("dark");
-      return false;
-    }
-    // Fallback : préférence système
+    if (stored) return stored === "dark";
+
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     document.documentElement.classList.toggle("dark", prefersDark);
     return prefersDark;
@@ -39,130 +45,141 @@ const useDarkMode = () => {
   return { dark, toggle };
 };
 
-/* ── Live clock ─────────────────────────────────────────── */
+/* ── Horloge en temps réel ─────────────────────────────────── */
 const useClock = () => {
   const [now, setNow] = useState(new Date());
+
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
   }, []);
+
   return now;
 };
 
 /* ═══════════════════════════════════════════════════════════
-   TOPBAR — exporté séparément pour usage dans Layout.tsx
+   TOPBAR — Design moderne & élégant
 ═══════════════════════════════════════════════════════════ */
-export const AppTopbar = () => {
+export const AppTopbar = ({ onMenuClick }: { onMenuClick?: () => void }) => {
   const { dark, toggle } = useDarkMode();
   const now = useClock();
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   const dateStr = now.toLocaleDateString("fr-FR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
   const timeStr = now.toLocaleTimeString("fr-FR", {
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
 
   return (
-    <div
-      className="flex items-center justify-end gap-3 px-4 py-2.5"
-      style={{ fontFamily: "'Raleway', sans-serif" }}
-    >
-      {/* Date + heure */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-card border border-border shadow-sm">
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-          <rect x="1" y="2" width="11" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" className="text-muted-foreground"/>
-          <path d="M4 1v2M9 1v2M1 5.5h11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-muted-foreground"/>
-        </svg>
-        <span className="text-[11px] font-bold text-muted-foreground font-mono tracking-wide">
-          {dateStr}
-        </span>
-        <span className="w-px h-3 bg-border" />
-        <span className="text-[11px] font-bold text-foreground font-mono tracking-wide">
-          {timeStr}
-        </span>
-        {/* Indicateur actif */}
-        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-      </div>
+    <div className="h-14 flex items-center justify-between px-4 bg-white dark:bg-transparent backdrop-blur-lg z-50">
+      {/* Menu burger mobile */}
+      {isMobile && (
+        <button
+          onClick={onMenuClick}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-card hover:bg-accent border border-border/70 active:scale-95 transition-all"
+        >
+          <Menu size={20} className="text-foreground" />
+        </button>
+      )}
 
-      {/* Toggle dark/light */}
-      <button
-        onClick={toggle}
-        className={cn(
-          "w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-200",
-          "bg-card border-border hover:border-primary/40 hover:bg-accent",
-          "shadow-sm"
-        )}
-        title={dark ? "Mode clair" : "Mode sombre"}
-      >
-        {dark
-          ? <Sun size={14} className="text-amber-400" />
-          : <Moon size={14} className="text-muted-foreground" />
-        }
-      </button>
+      <div className="flex-1 flex items-center justify-end gap-3">
+        {/* Date & Heure */}
+        <div className="hidden sm:flex items-center gap-3 px-4 py-1.5 bg-white dark:bg-transparent border border-border/70 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            {/* <div className="w-4 h-4 rounded-md border border-current flex items-center justify-center">
+              <span className="text-[10px]">📅</span>
+            </div> */}
+            <span className="text-xs font-mono font-semibold tracking-widest">{dateStr}</span>
+          </div>
+
+          <div className="w-px h-4 bg-border" />
+
+          <div className="flex items-center gap-2 font-mono text-sm font-semibold text-foreground">
+            {timeStr}
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+        </div>
+
+        {/* Dark mode toggle */}
+        <button
+          onClick={toggle}
+          className={cn(
+            "w-9 h-9 flex items-center justify-center rounded-2xl border border-border/70 bg-card",
+            "hover:border-primary/30 hover:bg-accent active:scale-95 transition-all duration-200"
+          )}
+          title={dark ? "Passer en mode clair" : "Passer en mode sombre"}
+        >
+          {dark ? (
+            <Sun size={18} className="text-cyan-400" />
+          ) : (
+            <Moon size={18} className="text-muted-foreground" />
+          )}
+        </button>
+      </div>
     </div>
   );
 };
 
 /* ═══════════════════════════════════════════════════════════
-   SIDEBAR FLOTTANTE
+   SIDEBAR CONTENT
 ═══════════════════════════════════════════════════════════ */
-const AppSidebar = () => {
+const SidebarContent = ({ isCollapsed, onCollapse }: { isCollapsed: boolean; onCollapse: () => void }) => {
   const location = useLocation();
   const { isAdmin, user, signOut, canView } = useAuth();
 
   const navItems = [
-    { to: "/",            icon: LayoutDashboard, label: "Dashboard",    show: isAdmin || canView("dashboard"),   section: "menu" },
-    { to: "/network-map", icon: Map,             label: "Network Map",  show: isAdmin || canView("network_map"), section: "menu" },
-    { to: "/countries",   icon: Globe,           label: "Pays",         show: canView("dashboard_country"),      section: "menu" },
-    { to: "/ipbx",        icon: Server,          label: "IPBX",         show: canView("settings"),               section: "menu" },
-    { to: "/sip-trunks",  icon: Network,         label: "SIP Trunks",   show: canView("sip_trunks"),             section: "menu" },
-    { to: "/extensions",  icon: Phone,           label: "Extensions",   show: canView("extensions"),             section: "menu" },
-    { to: "/calls",       icon: PhoneCall,       label: "Appels",       show: canView("cdr"),                    section: "menu" },
-    { to: "/quality",     icon: Activity,        label: "Qualité VoIP", show: canView("quality"),                section: "general" },
-    { to: "/alerts",      icon: Bell,            label: "Alertes",      show: canView("alerts"),                 section: "general" },
-    { to: "/users",       icon: Users,           label: "Utilisateurs", show: isAdmin,                           section: "general" },
+    { to: "/", icon: LayoutDashboard, label: "Tableau de bord", show: isAdmin || canView("dashboard"), section: "menu" },
+    { to: "/network-map", icon: Map, label: "Carte réseau", show: isAdmin || canView("network_map"), section: "menu" },
+    { to: "/countries", icon: Globe, label: "Pays", show: canView("dashboard_country"), section: "menu" },
+    { to: "/ipbx", icon: Server, label: "IPBX", show: canView("settings"), section: "menu" },
+    { to: "/sip-trunks", icon: Network, label: "SIP Trunks", show: canView("sip_trunks"), section: "menu" },
+    { to: "/extensions", icon: Phone, label: "Extensions", show: canView("extensions"), section: "menu" },
+    { to: "/calls", icon: PhoneCall, label: "Appels", show: canView("cdr"), section: "menu" },
+    { to: "/quality", icon: Activity, label: "Qualité VoIP", show: canView("quality"), section: "general" },
+    { to: "/alerts", icon: Bell, label: "Alertes", show: canView("alerts"), section: "general" },
+    { to: "/users", icon: Users, label: "Utilisateurs", show: isAdmin, section: "general" },
   ];
 
-  const menuItems    = navItems.filter(i => i.show && i.section === "menu");
-  const generalItems = navItems.filter(i => i.show && i.section === "general");
+  const menuItems = navItems.filter((i) => i.show && i.section === "menu");
+  const generalItems = navItems.filter((i) => i.show && i.section === "general");
 
   return (
-    /*
-      FLOATING SIDEBAR :
-      - fixed avec margin (top/left/bottom) pour l'effet "flottant"
-      - border-radius sur tout le sidebar
-      - box-shadow pour l'élévation
-      - border fine
-    */
-    <aside
-      className="fixed left-3 top-3 bottom-3 z-40 w-56 flex flex-col bg-card border border-border"
-      style={{
-        fontFamily: "'Raleway', sans-serif",
-        borderRadius: "18px",
-        boxShadow: "0 4px 24px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04)",
-      }}
-    >
-      {/* ── Logo ─────────────────────────────────────────────── */}
-      <div className="px-4 py-5 border-b border-border">
-        <div className="flex flex-col items-center gap-2">
-          <img src="/GVOIP.png" alt="GVoIP" className="w-12 h-12 object-contain" />
-          <h1 className="text-xl font-black text-foreground tracking-wide">
-            G<span className="text-primary">VoIP</span>
-          </h1>
+    <>
+      {/* Header */}
+      <div className="px-5 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src="/GVOIP.png" alt="GVoIP" className={`w-9 h-9 ` + (isCollapsed ? 'object-contain' : '')} />
+          {!isCollapsed && (
+            <h1 className="text-2xl font-black tracking-tighter">
+              G<span className="text-primary">VoIP</span>
+            </h1>
+          )}
         </div>
+
+        <button
+          onClick={onCollapse}
+          className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-accent transition-colors"
+          title={isCollapsed ? "Déplier" : "Replier"}
+        >
+          {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+        </button>
       </div>
 
-      {/* ── Nav ──────────────────────────────────────────────── */}
-      <nav className="flex-1 px-2.5 py-3 overflow-y-auto scrollbar-thin space-y-3">
-
-        {/* MENU */}
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-8 scrollbar-thin">
+        {/* MENU PRINCIPAL */}
         {menuItems.length > 0 && (
           <div>
-            <p className="px-3 mb-1.5 text-[9px] font-black tracking-[1.5px] uppercase text-muted-foreground">
-              Menu
-            </p>
-            <div className="space-y-0.5">
+            {!isCollapsed && (
+              <p className="px-3 mb-3 text-[10px] dark:text-white text-muted-foreground/50">MENU</p>
+            )}
+            <div className="space-y-1">
               {menuItems.map((item) => {
                 const isActive = location.pathname === item.to;
                 return (
@@ -170,27 +187,24 @@ const AppSidebar = () => {
                     key={item.to}
                     to={item.to}
                     className={cn(
-                      "relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-semibold transition-all duration-200",
+                      "group flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-200 relative overflow-hidden",
                       isActive
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
+                        ? "text-primary bg-primary/10 shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     )}
-                    style={isActive ? {
-                      background: "hsl(var(--primary) / 0.10)",
-                    } : undefined}
+                    title={isCollapsed ? item.label : undefined}
                   >
                     {isActive && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                        style={{ background: "hsl(var(--primary))" }}
-                      />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full" />
                     )}
+
                     <item.icon
-                      size={15}
-                      strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-primary" : "text-muted-foreground"}
+                      size={20}
+                      strokeWidth={isActive ? 2.5 : 1.8}
+                      className={isActive ? "text-primary" : "group-hover:text-foreground transition-colors"}
                     />
-                    {item.label}
+
+                    {!isCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 );
               })}
@@ -198,13 +212,13 @@ const AppSidebar = () => {
           </div>
         )}
 
-        {/* GÉNÉRAL */}
+        {/* SECTION GÉNÉRAL */}
         {generalItems.length > 0 && (
           <div>
-            <p className="px-3 mb-1.5 text-[9px] font-black tracking-[1.5px] uppercase text-muted-foreground">
-              Général
-            </p>
-            <div className="space-y-0.5">
+            {!isCollapsed && (
+              <p className="px-3 mb-3 text-[10px] dark:text-white text-muted-foreground/50">GÉNÉRAL</p>
+            )}
+            <div className="space-y-1">
               {generalItems.map((item) => {
                 const isActive = location.pathname === item.to;
                 return (
@@ -212,27 +226,24 @@ const AppSidebar = () => {
                     key={item.to}
                     to={item.to}
                     className={cn(
-                      "relative flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-semibold transition-all duration-200",
+                      "group flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-200",
                       isActive
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-muted/30"
+                        ? "text-primary bg-primary/10 shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     )}
-                    style={isActive ? {
-                      background: "hsl(var(--primary) / 0.10)",
-                    } : undefined}
+                    title={isCollapsed ? item.label : undefined}
                   >
                     {isActive && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                        style={{ background: "hsl(var(--primary))" }}
-                      />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full" />
                     )}
+
                     <item.icon
-                      size={15}
-                      strokeWidth={isActive ? 2.4 : 1.8}
-                      className={isActive ? "text-primary" : "text-muted-foreground"}
+                      size={20}
+                      strokeWidth={isActive ? 2.5 : 1.8}
+                      className={isActive ? "text-primary" : "group-hover:text-foreground transition-colors"}
                     />
-                    {item.label}
+
+                    {!isCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 );
               })}
@@ -241,32 +252,118 @@ const AppSidebar = () => {
         )}
       </nav>
 
-      {/* ── Footer ───────────────────────────────────────────── */}
-      <div className="px-3 py-3 border-t border-border space-y-1.5">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0" />
-          <span className="text-[9.5px] font-semibold text-muted-foreground">Système opérationnel</span>
+      {/* Footer Profil */}
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          {!isCollapsed && <span className="text-xs font-medium text-muted-foreground">Système opérationnel</span>}
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Shield size={10} className="text-muted-foreground shrink-0" />
-            <span className="text-[9.5px] text-muted-foreground font-medium truncate">
-              {user?.email || "—"}
-            </span>
+
+        {!isCollapsed ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <span className="font-bold text-primary text-lg">
+                  {user?.email?.[0]?.toUpperCase() || "U"}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm truncate">{user?.email?.split("@")[0] || "Utilisateur"}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={signOut}
+              className="h-9 w-9 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-xl"
+            >
+              <LogOut size={18} />
+            </Button>
           </div>
+        ) : (
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 hover:bg-red-500/10 hover:text-red-500 transition-colors rounded-lg"
             onClick={signOut}
-            title="Déconnexion"
+            className="mx-auto h-10 w-10 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-xl"
           >
-            <LogOut size={11} />
+            <LogOut size={18} />
           </Button>
-        </div>
+        )}
       </div>
+    </>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR DESKTOP (collapsible)
+═══════════════════════════════════════════════════════════ */
+const DesktopSidebar = () => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  return (
+    <aside
+      className="hidden md:flex fixed top-0 left-0 bottom-0 z-40 flex-col bg-card shadow-xl overflow-hidden transition-all duration-300 dark:border-r dark:border-white/10"
+      style={{ width: isCollapsed ? "78px" : "248px" }}
+    >
+      <SidebarContent isCollapsed={isCollapsed} onCollapse={() => setIsCollapsed(!isCollapsed)} />
     </aside>
   );
 };
 
-export { AppSidebar };
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR MOBILE (Drawer)
+═══════════════════════════════════════════════════════════ */
+const MobileSidebar = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  return (
+    <>
+      {/* Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Drawer */}
+      <div
+        className={cn(
+          "fixed top-0 left-0 bottom-0 z-50 w-72 bg-card border-r border-border flex flex-col shadow-2xl transition-transform duration-300 md:hidden",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="absolute top-4 right-4 z-10">
+          <button
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-accent"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <SidebarContent isCollapsed={false} onCollapse={() => {}} />
+      </div>
+    </>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════
+   EXPORT FINAL
+═══════════════════════════════════════════════════════════ */
+export const AppSidebar = () => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      <DesktopSidebar />
+      <MobileSidebar isOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+
+      {/* Topbar mobile uniquement */}
+      <div className="fixed top-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-lg">
+        <AppTopbar onMenuClick={() => setMobileOpen((prev) => !prev)} />
+      </div>
+    </>
+  );
+};

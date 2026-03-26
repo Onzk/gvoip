@@ -13,6 +13,7 @@
 ═══════════════════════════════════════════════════════════════ */
 
 @layer base {
+
   :root,
   .light {
     /* ── Fond page — gris très clair neutre ── */
@@ -142,17 +143,33 @@
   }
 }
 
+* {
+    font-family: Raleway, sans-serif !important;
+  }
+
 @layer base {
   * {
     @apply border-border;
   }
 
-  body {
+  html,
+  body,
+  :root {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Raleway', sans-serif;
+    font-family: Raleway, sans-serif;
   }
 
-  code, .font-mono {
+  button,
+  input,
+  textarea,
+  select,
+  optgroup,
+  option {
+    font-family: inherit;
+  }
+
+  code,
+  .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
 }
@@ -224,8 +241,15 @@
   }
 
   @keyframes pulse-status {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.5; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.5;
+    }
   }
 
   /* ── Scrollbar bleue ── */
